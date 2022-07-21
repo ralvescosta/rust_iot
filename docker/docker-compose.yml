@@ -1,0 +1,12 @@
+version: "3"
+
+services:
+  mqtt:
+    build:
+      context: .
+    ports:
+      - 1883:1883
+      - 9001:9001
+    volumes:
+      - /mosquitto/data
+      - /mosquitto/log
