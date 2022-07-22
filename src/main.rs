@@ -6,15 +6,16 @@ fn main() {
     pretty_env_logger::init();
 
     let mut mqtt_options = MqttOptions::new("test-1", "localhost", 1883);
-    let will = LastWill::new("hello/world", "good bye", QoS::AtMostOnce, false);
     mqtt_options
         .set_credentials("mqtt_user", "password")
-        .set_keep_alive(Duration::from_secs(5))
-        .set_last_will(will);
+        .set_keep_alive(Duration::from_secs(5));
 
     let (client, mut connection) = Client::new(mqtt_options, 10);
+
+    //
     thread::spawn(move || publish(client));
 
+    //
     for (i, notification) in connection.iter().enumerate() {
         println!("{}. Notification = {:?}", i, notification);
     }
