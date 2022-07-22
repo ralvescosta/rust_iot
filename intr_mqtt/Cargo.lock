@@ -12,10 +12,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "app"
-version = "0.1.0"
-
-[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -67,10 +63,6 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
-
-[[package]]
-name = "domain"
-version = "0.1.0"
 
 [[package]]
 name = "env_logger"
@@ -130,10 +122,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "grpc"
-version = "0.1.0"
-
-[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -141,10 +129,6 @@ checksum = "62b467343b94ba476dcb2500d242dadbb39557df889310ac77c5d99100aaac33"
 dependencies = [
  "libc",
 ]
-
-[[package]]
-name = "http"
-version = "0.1.0"
 
 [[package]]
 name = "http"
@@ -165,10 +149,6 @@ checksum = "df004cfca50ef23c36850aaaa59ad52cc70d0e90243c3c7737a4dd32dc7a3c4f"
 dependencies = [
  "quick-error",
 ]
-
-[[package]]
-name = "infra"
-version = "0.1.0"
 
 [[package]]
 name = "itoa"
@@ -235,7 +215,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "mqtt"
+name = "mqtt_client"
 version = "0.1.0"
 dependencies = [
  "pretty_env_logger",
@@ -406,7 +386,7 @@ checksum = "502d06d1030126f5ca1a3b64944af28c7475f3c2858ff20deec12c230f266a53"
 dependencies = [
  "bytes",
  "flume",
- "http 0.2.8",
+ "http",
  "log",
  "pollster",
  "rustls-pemfile",

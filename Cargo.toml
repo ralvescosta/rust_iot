@@ -1,9 +1,10 @@
-[package]
-name = "mqtt_client"
-version = "0.1.0"
-edition = "2021"
+[workspace]
 
-[dependencies]
-pretty_env_logger = { version = "0.4.0" }
-rumqttc = { version =  "0.13.0" }
-tokio = { version = "1", features = ["full"] }
+members = [
+    "app",
+    "domain",
+    "infra",
+    "intr_grpc",
+    "intr_http",
+    "intr_mqtt"
+]
