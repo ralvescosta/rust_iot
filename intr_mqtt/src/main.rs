@@ -16,11 +16,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut mqtt = MQTT::new(cfg);
     let mut eventloop = mqtt.connect();
 
+    let iot_controller = controllers::IoTController::new();
+
     mqtt.subscriber(
         "iot/data/temp/#",
         rumqttc::QoS::AtLeastOnce,
         MetadataKind::IoT(IoTServiceKind::Temp),
-        controllers::iot_temp_controller,
+        iot_controller.iot_temp_controller(),
     )
     .await?;
 

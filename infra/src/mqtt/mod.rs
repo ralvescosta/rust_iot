@@ -2,13 +2,10 @@ pub mod types;
 
 use crate::env::Config;
 use async_trait::async_trait;
+use bytes::Bytes;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
-use types::{Handler, IoTServiceKind, MessageMetadata, MetadataKind};
-
-use self::types::{Message, TempMessage};
-
-// use bytes::Bytes;
+use types::{Handler, IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage};
 
 #[async_trait]
 pub trait IMQTT {
@@ -20,7 +17,15 @@ pub trait IMQTT {
         kind: MetadataKind,
         handler: Handler,
     ) -> Result<(), Box<dyn Error>>;
+    async fn publish(
+        &self,
+        topic: &str,
+        qos: QoS,
+        retain: bool,
+        payload: &[u8],
+    ) -> Result<(), Box<dyn Error>>;
     fn get_metadata(&self, topic: String) -> Result<MessageMetadata, ()>;
+    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, ()>;
     fn handle_event(&self, event: &Event);
 }
 
@@ -72,6 +77,22 @@ impl IMQTT for MQTT {
         Ok(())
     }
 
+    async fn publish(
+        &self,
+        topic: &str,
+        qos: QoS,
+        retain: bool,
+        payload: &[u8],
+    ) -> Result<(), Box<dyn Error>> {
+        self.client
+            .clone()
+            .unwrap()
+            .publish(topic, qos, retain, payload)
+            .await?;
+
+        Ok(())
+    }
+
     fn get_metadata(&self, topic: String) -> Result<MessageMetadata, ()> {
         let splitted = topic.split("/").collect::<Vec<&str>>();
         if splitted.len() < 3 && splitted[0] != "iot" {
@@ -94,6 +115,20 @@ impl IMQTT for MQTT {
         }
     }
 
+    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, ()> {
+        match kind {
+            MetadataKind::IoT(IoTServiceKind::Temp) => {
+                let msg = serde_json::from_slice::<TempMessage>(payload);
+                if msg.is_err() {
+                    return Err(());
+                }
+
+                Ok(Message::Temp(msg.unwrap()))
+            }
+            _ => Err(()),
+        }
+    }
+
     fn handle_event(&self, event: &Event) {
         if let Event::Incoming(Packet::Publish(msg)) = event.to_owned() {
             let metadata = self.get_metadata(msg.topic);
@@ -102,18 +137,29 @@ impl IMQTT for MQTT {
             }
             let metadata = metadata.unwrap();
 
+            let data = self.get_message(&metadata.kind, &msg.payload);
+            if data.is_err() {
+                return;
+            }
+            let data = data.unwrap();
+
             let handler = self.dispatchers.get(&metadata.kind);
             if handler.is_none() {
                 return;
             }
 
-            handler.unwrap()(
-                &metadata,
-                &Message::Temp(TempMessage {
-                    temp: 10.0,
-                    time: 10,
-                }),
-            );
+            handler.unwrap()(&metadata, &data);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_connect() {
+        let mut mq = MQTT::new(Config::new());
+        mq.connect();
     }
 }

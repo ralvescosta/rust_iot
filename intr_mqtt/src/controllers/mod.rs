@@ -1,3 +1,3 @@
-mod iot_temp;
+mod iot;
 
-pub use iot_temp::iot_temp_controller;
+pub use iot::IoTController;
