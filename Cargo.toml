@@ -4,10 +4,10 @@ members = [
     "app",
     "domain",
     "infra",
-    "p_grpc",
-    "p_http",
-    "p_mqtt"
+    "s.grpc",
+    "s.http",
+    "s.mqtt"
 ]
 
 
-default-members = ["p_mqtt", "p_grpc", "p_http"]
+default-members = ["s.mqtt", "s.grpc", "s.http"]
