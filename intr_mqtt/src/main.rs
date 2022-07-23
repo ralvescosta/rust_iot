@@ -1,58 +1,90 @@
-use tokio::{task, time};
+mod controllers;
+mod viewmodels;
 
-use rumqttc::{self, AsyncClient, Event, MqttOptions, Packet, QoS};
+use viewmodels::{IoTData, IoTMessageKind, IoTTempViewModel, IoTTopicInfoViewModel};
+
+use bytes::Bytes;
+
+use core::slice::SlicePattern;
+use rumqttc::{self, AsyncClient, Event, MqttOptions, Packet};
 use std::error::Error;
 use std::time::Duration;
 
 #[tokio::main(worker_threads = 1)]
 async fn main() -> Result<(), Box<dyn Error>> {
-    pretty_env_logger::init();
-    // color_backtrace::install();
-
-    let mut mqtt_options = MqttOptions::new("test-1", "localhost", 1883);
+    let mut mqtt_options = MqttOptions::new("my-app-name", "localhost", 1883);
     mqtt_options
         .set_credentials("mqtt_user", "password")
         .set_keep_alive(Duration::from_secs(5));
 
-    let (client, mut eventloop) = AsyncClient::new(mqtt_options, 50);
-    task::spawn(async move {
-        requests(client).await;
-        time::sleep(Duration::from_secs(10)).await;
-    });
+    let (_client, mut eventloop) = AsyncClient::new(mqtt_options, 50);
 
     loop {
-        if let Ok(e) = eventloop.poll().await {
-            println!("Event::");
-            if let Event::Incoming(inc) = e {
-                println!("Incoming::");
-                if let Packet::Publish(res) = inc {
-                    println!("Publish::");
-                    println!("{:?}", res)
-                } else {
-                    println!("{:?}\n", inc.clone());
-                }
-            } else {
-                println!("Outgoing::");
-                println!("{:?}\n", e.clone());
-            }
+        match eventloop.poll().await {
+            Ok(event) => event_handler(&event),
+            Err(err) => println!("{:?}", err),
         }
     }
 }
 
-async fn requests(client: AsyncClient) {
-    client
-        .subscribe("hello/world", QoS::AtMostOnce)
-        .await
-        .unwrap();
-
-    for i in 1..=10 {
-        client
-            .publish("hello/world", QoS::AtMostOnce, false, vec![1; i])
-            .await
-            .unwrap();
-
-        time::sleep(Duration::from_secs(1)).await;
+fn topic_extractor(topic: String) -> Result<IoTTopicInfoViewModel, ()> {
+    let splitted = topic.split("/").collect::<Vec<&str>>();
+    if splitted.len() < 3 {
+        return Err(());
     }
 
-    time::sleep(Duration::from_secs(120)).await;
+    match splitted[0] {
+        "temp" => Ok(IoTTopicInfoViewModel {
+            kind: IoTMessageKind::Temp,
+            topic: splitted[0].to_owned(),
+            device: splitted[1].to_owned(),
+            location: splitted[2].to_owned(),
+        }),
+
+        _ => Err(()),
+    }
+}
+
+fn deserializer(kind: IoTMessageKind, payload: Bytes) -> Result<IoTData, ()> {
+    match kind {
+        IoTMessageKind::Temp => {
+            if let Ok(des) = payload {
+                return Ok(IoTData::Temp(des));
+            }
+            Err(())
+        }
+        _ => Err(()),
+    }
+}
+
+fn event_handler(event: &Event) {
+    if let Event::Incoming(Packet::Publish(publish)) = event.to_owned() {
+        println!("Event::Incoming::Packet::Publish");
+        println!("{:?}", publish);
+
+        let topic = topic_extractor(publish.topic);
+        if let Err(err) = topic {
+            return;
+        }
+        let topic = topic.unwrap();
+
+        let data = deserializer(topic.kind, publish.payload);
+        if let Err(err) = data {
+            return;
+        }
+        let data = data.unwrap();
+
+        controller_delegate(topic, data);
+    }
+}
+
+fn controller_delegate(info: IoTTopicInfoViewModel, payload: IoTData) {
+    match info.topic.as_str() {
+        "/temp/#" => {
+            if let IoTData::Temp(data) = payload {
+                controllers::iot_temp_controller(Box::new(info), Box::new(data));
+            }
+        }
+        _ => println!("event with no controller"),
+    }
 }
