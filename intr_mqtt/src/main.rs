@@ -1,5 +1,4 @@
 mod controllers;
-mod viewmodels;
 
 use infra::{
     env::Config,
