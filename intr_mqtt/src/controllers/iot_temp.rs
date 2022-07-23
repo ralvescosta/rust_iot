@@ -1,3 +1,5 @@
-use crate::viewmodels::{IoTTempViewModel, IoTTopicInfoViewModel};
+use infra::mqtt::types::{Message, MessageMetadata};
 
-pub fn iot_temp_controller(topic: &IoTTopicInfoViewModel, payload: &IoTTempViewModel) {}
+pub fn iot_temp_controller(meta: &MessageMetadata, msg: &Message) {
+    println!("Controller")
+}

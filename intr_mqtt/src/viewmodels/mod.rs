@@ -1,15 +1,22 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
-pub struct IoTTempViewModel {
-    pub temp: f32,
-    pub time: u64,
+#[derive(Serialize, Deserialize, Clone, Copy)]
+pub enum IoTService {
+    Temp,
+    GPS,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum IoTMessageKind {
-    Temp,
-    GPS,
+    IoT(IoTService),
+    Health,
+    Log,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct IoTTempViewModel {
+    pub temp: f32,
+    pub time: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
