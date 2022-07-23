@@ -6,12 +6,13 @@ pub struct IoTTempViewModel {
     pub time: u64,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Copy)]
 pub enum IoTMessageKind {
     Temp,
+    GPS,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct IoTTopicInfoViewModel {
     pub kind: IoTMessageKind,
     pub topic: String,
@@ -19,6 +20,8 @@ pub struct IoTTopicInfoViewModel {
     pub location: String,
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum IoTData {
     Temp(IoTTempViewModel),
+    GPS,
 }

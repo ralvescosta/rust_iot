@@ -5,7 +5,6 @@ use viewmodels::{IoTData, IoTMessageKind, IoTTempViewModel, IoTTopicInfoViewMode
 
 use bytes::Bytes;
 
-use core::slice::SlicePattern;
 use rumqttc::{self, AsyncClient, Event, MqttOptions, Packet};
 use std::error::Error;
 use std::time::Duration;
@@ -48,10 +47,12 @@ fn topic_extractor(topic: String) -> Result<IoTTopicInfoViewModel, ()> {
 fn deserializer(kind: IoTMessageKind, payload: Bytes) -> Result<IoTData, ()> {
     match kind {
         IoTMessageKind::Temp => {
-            if let Ok(des) = payload {
-                return Ok(IoTData::Temp(des));
+            let data = serde_json::from_slice::<IoTTempViewModel>(&payload);
+            if let Err(_) = data {
+                return Err(());
             }
-            Err(())
+
+            Ok(IoTData::Temp(data.unwrap()))
         }
         _ => Err(()),
     }
@@ -63,26 +64,26 @@ fn event_handler(event: &Event) {
         println!("{:?}", publish);
 
         let topic = topic_extractor(publish.topic);
-        if let Err(err) = topic {
+        if let Err(_) = topic {
             return;
         }
         let topic = topic.unwrap();
 
         let data = deserializer(topic.kind, publish.payload);
-        if let Err(err) = data {
+        if let Err(_) = data {
             return;
         }
         let data = data.unwrap();
 
-        controller_delegate(topic, data);
+        controller_delegate(&topic, &data);
     }
 }
 
-fn controller_delegate(info: IoTTopicInfoViewModel, payload: IoTData) {
+fn controller_delegate(info: &IoTTopicInfoViewModel, payload: &IoTData) {
     match info.topic.as_str() {
         "/temp/#" => {
             if let IoTData::Temp(data) = payload {
-                controllers::iot_temp_controller(Box::new(info), Box::new(data));
+                controllers::iot_temp_controller(info, data);
             }
         }
         _ => println!("event with no controller"),
