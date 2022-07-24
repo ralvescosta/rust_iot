@@ -18,7 +18,7 @@ pub struct Config {
     pub mqtt_password: &'static str,
 
     pub log_level: &'static str,
-    pub enable_mqtt_logging: bool,
+    pub enable_rumqttc_logging: bool,
 }
 
 impl Config {
@@ -31,7 +31,7 @@ impl Config {
             mqtt_user: "mqtt_user",
             mqtt_password: "password",
             log_level: "debug",
-            enable_mqtt_logging: false,
+            enable_rumqttc_logging: false,
         })
     }
 }

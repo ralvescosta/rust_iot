@@ -4,7 +4,6 @@ use crate::env::Environment;
 
 use super::env::Config;
 
-use tracing::Subscriber;
 use tracing_bunyan_formatter::BunyanFormattingLayer;
 use tracing_log::LogTracer;
 use tracing_subscriber::{
@@ -24,13 +23,13 @@ pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
     let level_filter = get_log_level_filter(cfg);
 
     let mut filter_mqtt = None;
-    if cfg.enable_mqtt_logging {
+    if !cfg.enable_rumqttc_logging {
         filter_mqtt = Some(FilterFn::new(|meta| {
             meta.module_path() != Some("rumqttc::state")
         }));
     }
 
-    let mut fmt_pretty: Option<Layer<Box<dyn Subscriber>, Pretty, Format<Pretty>>> = None;
+    let mut fmt_pretty: Option<Layer<_, Pretty, Format<Pretty>>> = None;
     let mut fmt_json = None;
 
     if cfg.env == Environment::Local {
@@ -46,7 +45,7 @@ pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
         tracing_subscriber::registry()
             .with(level_filter)
             .with(fmt_json)
-            // .with(fmt_pretty)
+            .with(fmt_pretty)
             .with(filter_mqtt),
     )?;
 
