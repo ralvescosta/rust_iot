@@ -1,11 +1,14 @@
 pub mod types;
 
 use crate::env::Config;
+use types::{Handler, IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage};
+
 use async_trait::async_trait;
 use bytes::Bytes;
+use log::error;
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
+
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
-use types::{Handler, IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage};
 
 #[async_trait]
 pub trait IMQTT {
@@ -96,7 +99,7 @@ impl IMQTT for MQTT {
     fn get_metadata(&self, topic: String) -> Result<MessageMetadata, ()> {
         let splitted = topic.split("/").collect::<Vec<&str>>();
         if splitted.len() < 3 && splitted[0] != "iot" {
-            println!("[err] topic_extractor");
+            error!("unformatted topic");
             return Err(());
         }
 
@@ -111,7 +114,10 @@ impl IMQTT for MQTT {
                     topic: topic.clone(),
                 })
             }
-            _ => Err(()),
+            _ => {
+                error!("unknown message kind");
+                Err(())
+            }
         }
     }
 
@@ -125,7 +131,10 @@ impl IMQTT for MQTT {
 
                 Ok(Message::Temp(msg.unwrap()))
             }
-            _ => Err(()),
+            _ => {
+                error!("unknown message kind");
+                Err(())
+            }
         }
     }
 

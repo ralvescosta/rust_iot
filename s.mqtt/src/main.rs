@@ -15,7 +15,7 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
 
-    logging::setup(&cfg);
+    logging::setup(&cfg)?;
 
     let mut mqtt = MQTT::new(cfg);
     let mut eventloop = mqtt.connect();

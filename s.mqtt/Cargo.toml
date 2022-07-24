@@ -12,4 +12,4 @@ rumqttc = { version =  "0.13.0" }
 serde = { version = "1.0.140", features = ["derive"] }
 serde_json = { version = "1.0.82" }
 tokio = { version = "1", features = ["full"] }
-log = "0.4.17"
+log = { version = "0.4.17" }

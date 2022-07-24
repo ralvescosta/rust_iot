@@ -183,6 +183,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "log",
  "rumqttc",
  "serde",
  "serde_json",
