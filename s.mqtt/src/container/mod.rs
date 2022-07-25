@@ -3,8 +3,6 @@ use std::sync::{Arc, Mutex};
 
 use app::{DeliveryIoTMessageService, IDeliveryIoTMessageService};
 
-pub trait Injectable {}
-
 lazy_static! {
     pub static ref SINGLETON: Mutex<Option<Container>> = Mutex::new(None);
 }
