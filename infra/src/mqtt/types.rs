@@ -30,4 +30,6 @@ pub enum Message {
     Temp(TempMessage),
 }
 
-pub type Handler = fn(meta: &MessageMetadata, msg: &Message);
+pub trait IController {
+    fn exec(&self, meta: &MessageMetadata, msg: &Message);
+}

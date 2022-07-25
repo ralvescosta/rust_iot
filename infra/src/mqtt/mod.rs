@@ -1,7 +1,7 @@
 pub mod types;
 
 use crate::env::Config;
-use types::{Handler, IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage};
+use types::{IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage};
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -9,6 +9,8 @@ use log::{debug, error};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
+
+use self::types::IController;
 
 #[async_trait]
 pub trait IMQTT {
@@ -18,7 +20,7 @@ pub trait IMQTT {
         topic: &str,
         qos: QoS,
         kind: MetadataKind,
-        handler: Handler,
+        controller: Arc<dyn IController + Sync + Send>,
     ) -> Result<(), Box<dyn Error>>;
     async fn publish(
         &self,
@@ -36,7 +38,7 @@ pub trait IMQTT {
 pub struct MQTT {
     cfg: Box<Config>,
     client: Option<Arc<AsyncClient>>,
-    dispatchers: HashMap<MetadataKind, Handler>,
+    dispatchers: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>>,
 }
 
 impl MQTT {
@@ -71,13 +73,13 @@ impl IMQTT for MQTT {
         topic: &str,
         qos: QoS,
         kind: MetadataKind,
-        handler: Handler,
+        controller: Arc<dyn IController + Sync + Send>,
     ) -> Result<(), Box<dyn Error>> {
         debug!("subscribing in topic: {:?}...", topic);
 
         self.client.clone().unwrap().subscribe(topic, qos).await?;
 
-        self.dispatchers.insert(kind, handler);
+        self.dispatchers.insert(kind, controller);
 
         debug!("subscribed");
         Ok(())
@@ -162,15 +164,15 @@ impl IMQTT for MQTT {
             }
             let data = data.unwrap();
 
-            let handler = self.dispatchers.get(&metadata.kind);
-            if handler.is_none() {
+            let controller = self.dispatchers.get(&metadata.kind);
+            if controller.is_none() {
                 debug!("ignored message");
                 return;
             }
 
             debug!("processing msg...");
 
-            handler.unwrap()(&metadata, &data);
+            controller.unwrap().exec(&metadata, &data);
 
             debug!("msg was processed");
         }

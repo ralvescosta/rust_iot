@@ -1,9 +1,25 @@
-use crate::container::ServicesContainer;
-use infra::mqtt::types::{Message, MessageMetadata};
+use std::sync::Arc;
+
+use app::IDeliveryIoTMessageService;
+use infra::mqtt::types::{IController, Message, MessageMetadata};
 use log::info;
 
-pub fn iot_controller(_meta: &MessageMetadata, _msg: &Message) {
-    info!("iot_controller");
-    let service = ServicesContainer::delivery_service();
-    service.delivery(10);
+pub struct IoTController {
+    service: Arc<dyn IDeliveryIoTMessageService + Send + Sync>,
+}
+
+impl IoTController {
+    pub fn new(
+        service: Arc<dyn IDeliveryIoTMessageService + Send + Sync>,
+    ) -> Arc<dyn IController + Send + Sync> {
+        Arc::new(IoTController { service })
+    }
+}
+
+impl IController for IoTController {
+    fn exec(&self, _meta: &MessageMetadata, _msg: &Message) {
+        info!("IoTController");
+
+        self.service.delivery(10);
+    }
 }

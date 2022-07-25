@@ -1,7 +1,6 @@
-mod container;
 mod controllers;
 
-use container::ServicesContainer;
+use app::DeliveryIoTMessageService;
 use infra::{
     env::Config,
     logging,
@@ -18,20 +17,18 @@ use std::error::Error;
 #[tokio::main(worker_threads = 1)]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
-
     logging::setup(&cfg)?;
 
-    ServicesContainer::new()?;
+    let delivery_service = DeliveryIoTMessageService::new();
 
     let mut mqtt = MQTT::new(cfg);
-
     let mut eventloop = mqtt.connect();
 
     mqtt.subscriber(
         "iot/data/temp/#",
         rumqttc::QoS::AtLeastOnce,
         MetadataKind::IoT(IoTServiceKind::Temp),
-        controllers::iot_controller,
+        controllers::IoTController::new(delivery_service.clone()),
     )
     .await?;
 
