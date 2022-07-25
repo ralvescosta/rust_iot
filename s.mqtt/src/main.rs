@@ -1,7 +1,7 @@
 mod container;
 mod controllers;
 
-use container::Container;
+use container::ServicesContainer;
 use infra::{
     env::Config,
     logging,
@@ -12,16 +12,19 @@ use infra::{
     tracing,
 };
 
+use log::error;
 use std::error::Error;
 
 #[tokio::main(worker_threads = 1)]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
+
     logging::setup(&cfg)?;
 
-    Container::new();
+    ServicesContainer::new()?;
 
     let mut mqtt = MQTT::new(cfg);
+
     let mut eventloop = mqtt.connect();
 
     mqtt.subscriber(
@@ -37,7 +40,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Ok(event) => {
                 mqtt.handle_event(&event);
             }
-            Err(err) => println!("{:?}", err),
+            Err(err) => error!("{:?}", err),
         }
     }
 }

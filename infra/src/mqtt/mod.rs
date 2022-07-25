@@ -5,7 +5,7 @@ use types::{Handler, IoTServiceKind, Message, MessageMetadata, MetadataKind, Tem
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use log::error;
+use log::{debug, error};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
@@ -40,7 +40,7 @@ pub struct MQTT {
 }
 
 impl MQTT {
-    pub fn new(cfg: Box<Config>) -> Box<dyn IMQTT> {
+    pub fn new(cfg: Box<Config>) -> Box<dyn IMQTT + Send + Sync> {
         Box::new(MQTT {
             cfg,
             client: None,
@@ -73,10 +73,13 @@ impl IMQTT for MQTT {
         kind: MetadataKind,
         handler: Handler,
     ) -> Result<(), Box<dyn Error>> {
+        debug!("subscribing in topic: {:?}...", topic);
+
         self.client.clone().unwrap().subscribe(topic, qos).await?;
 
         self.dispatchers.insert(kind, handler);
 
+        debug!("subscribed");
         Ok(())
     }
 
@@ -87,12 +90,15 @@ impl IMQTT for MQTT {
         retain: bool,
         payload: &[u8],
     ) -> Result<(), Box<dyn Error>> {
+        debug!("publishing in a topic {:?}", topic);
+
         self.client
             .clone()
             .unwrap()
             .publish(topic, qos, retain, payload)
             .await?;
 
+        debug!("message published");
         Ok(())
     }
 
@@ -140,24 +146,33 @@ impl IMQTT for MQTT {
 
     fn handle_event(&self, event: &Event) {
         if let Event::Incoming(Packet::Publish(msg)) = event.to_owned() {
+            debug!("message received in a topic {:?}", msg.topic);
+
             let metadata = self.get_metadata(msg.topic);
             if metadata.is_err() {
+                debug!("ignored message");
                 return;
             }
             let metadata = metadata.unwrap();
 
             let data = self.get_message(&metadata.kind, &msg.payload);
             if data.is_err() {
+                debug!("ignored message");
                 return;
             }
             let data = data.unwrap();
 
             let handler = self.dispatchers.get(&metadata.kind);
             if handler.is_none() {
+                debug!("ignored message");
                 return;
             }
 
+            debug!("processing msg...");
+
             handler.unwrap()(&metadata, &data);
+
+            debug!("msg was processed");
         }
     }
 }
@@ -169,6 +184,6 @@ mod tests {
     #[test]
     fn test_connect() {
         let mut mq = MQTT::new(Config::new());
-        mq.connect();
+        let mut a = mq.connect();
     }
 }
