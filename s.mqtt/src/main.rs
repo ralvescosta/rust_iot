@@ -1,7 +1,6 @@
 mod container;
 mod controllers;
 
-use app::DeliveryIoTMessageService;
 use container::Container;
 use infra::{
     env::Config,
@@ -21,10 +20,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     logging::setup(&cfg)?;
 
     Container::new();
-
-    // app::container::Container::new();
-    // let mut c = app::container::Container::get();
-    // c.set(DeliveryIoTMessageService::i());
 
     let mut mqtt = MQTT::new(cfg);
     let mut eventloop = mqtt.connect();
