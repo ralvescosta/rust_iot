@@ -1,5 +1,8 @@
+mod container;
 mod controllers;
+
 use app::DeliveryIoTMessageService;
+use container::Container;
 use infra::{
     env::Config,
     logging,
@@ -7,6 +10,7 @@ use infra::{
         types::{IoTServiceKind, MetadataKind},
         MQTT,
     },
+    tracing,
 };
 
 use std::error::Error;
@@ -14,20 +18,22 @@ use std::error::Error;
 #[tokio::main(worker_threads = 1)]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
-
     logging::setup(&cfg)?;
+
+    Container::new();
+
+    // app::container::Container::new();
+    // let mut c = app::container::Container::get();
+    // c.set(DeliveryIoTMessageService::i());
 
     let mut mqtt = MQTT::new(cfg);
     let mut eventloop = mqtt.connect();
-
-    let delivery_iot_msgs_service = DeliveryIoTMessageService::new();
-    let iot_controller = controllers::IoTController::new(delivery_iot_msgs_service);
 
     mqtt.subscriber(
         "iot/data/temp/#",
         rumqttc::QoS::AtLeastOnce,
         MetadataKind::IoT(IoTServiceKind::Temp),
-        iot_controller.iot_temp_controller(),
+        controllers::iot_controller,
     )
     .await?;
 

@@ -1,3 +1,3 @@
 mod iot;
 
-pub use iot::IoTController;
+pub use iot::iot_controller;

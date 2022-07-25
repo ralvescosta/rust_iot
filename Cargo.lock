@@ -514,6 +514,7 @@ dependencies = [
  "app",
  "bytes",
  "infra",
+ "lazy_static",
  "log",
  "rumqttc",
  "serde",

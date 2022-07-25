@@ -35,6 +35,9 @@ Make sure you have the following pre-requirements:
   - cargo@lts
   - protoc@lts
 
+- cargo install protobuf-codegen
+- cargo install grpcio-compiler
+
 - **To build the MQTT Binary**
 
   ```bash
