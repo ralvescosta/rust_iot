@@ -1,0 +1,9 @@
+FROM rust:1.62.0 as builder
+WORKDIR /usr/src/myapp
+COPY . .
+RUN cargo install --path ./s.http
+
+FROM scratch
+COPY --from=builder /usr/local/cargo/bin/http /usr/local/bin/http
+USER scratchuser
+CMD ["http"]
