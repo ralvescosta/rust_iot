@@ -23,11 +23,12 @@ jobs:
         token: ${{ secrets.CODECOV_TOKEN }}
         # fail_ci_if_error: true
         verbose: true
-    
-    - name: Install and Build
-      run: |
-        cargo install cargo-tarpaulin
-        cargo build --verbose
+
+    - name: Install tools
+      run: cargo install cargo-tarpaulin
+
+    - name: Build
+      run: cargo build --verbose
       
     - name: Run tests
       run: cargo tarpaulin --out Xml
