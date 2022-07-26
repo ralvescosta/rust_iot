@@ -9,22 +9,22 @@ Also in this project we take care about some well-known practices to web develop
 - **MQTT binary**
 
   - For MQTT the project has been used the [rumqttc](https://crates.io/crates/rumqttc) create, this create seen good offering a async client based in Tokio.
-  - The main ideia for the p_mqtt binary is that receive the IoT data and delivery these data to a RabbitMQ exchange
+  - The main ideia for the s.mqtt binary is that receive the IoT data and delivery these data to a RabbitMQ exchange
 
 - **RabbitMQ binary**
 
   - For HTTP the project has been used [lapin](https://crates.io/crates/lapin) create.
-  - The main ideia for the p_amqp binary is that receive the IoT from a queue and save these data into PostgreSQL
+  - The main ideia for the s.amqp binary is that receive the IoT from a queue and save these data into PostgreSQL
 
 - **HTTP binary**
 
   - For HTTP the project has been used [actix-web](https://crates.io/crates/actix-web) create.
-  - The main ideia for the p_http binary is that get the data that has been saved in PostgreSQL and return a friendly JSON.
+  - The main ideia for the s.http binary is that get the data that has been saved in PostgreSQL and return a friendly JSON.
 
 - **gRPC binary**
 
   - For gRPC the project has been used [tonic](https://crates.io/crates/tonic) create.
-  - The main ideia for the p_http binary is that get the data that has been saved in PostgreSQL and return using proto buffer.
+  - The main ideia for the s.grpc binary is that get the data that has been saved in PostgreSQL and return using proto buffer.
 
 ## How can I build the binaries?
 
