@@ -1,8 +1,6 @@
-use std::error::Error;
-
-use crate::env::Environment;
-
 use super::env::Config;
+use crate::env::Environment;
+use crate::errors::LoggingError;
 
 use tracing_bunyan_formatter::BunyanFormattingLayer;
 use tracing_log::LogTracer;
@@ -15,8 +13,8 @@ use tracing_subscriber::{
     layer::SubscriberExt,
 };
 
-pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
-    LogTracer::init()?;
+pub fn setup(cfg: &Config) -> Result<(), LoggingError> {
+    LogTracer::init().map_err(|_| LoggingError::InternalError {})?;
 
     let (non_blocking_writer, _guard) = tracing_appender::non_blocking(std::io::stdout());
 
@@ -47,7 +45,8 @@ pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
             .with(fmt_json)
             .with(fmt_pretty)
             .with(filter_mqtt),
-    )?;
+    )
+    .map_err(|_| LoggingError::InternalError {})?;
 
     Ok(())
 }

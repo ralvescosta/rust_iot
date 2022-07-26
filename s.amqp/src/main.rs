@@ -1,18 +1,25 @@
+use std::error::Error;
+
+use infra::{env::Config, logging};
 use lapin::{
     message::DeliveryResult,
     options::{BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions},
-    types::FieldTable,
+    types::{FieldTable, LongString},
     BasicProperties, Connection, ConnectionProperties,
 };
 
 #[tokio::main]
-async fn main() {
-    let uri = "amqp://localhost:5672";
+async fn main() -> Result<(), Box<dyn Error>> {
+    let cfg = Config::new();
+    logging::setup(&cfg)?;
+
+    let uri = "amqp://admin:password@localhost:5672/";
     let options = ConnectionProperties::default()
         // Use tokio executor and reactor.
         // At the moment the reactor is only available for unix.
         .with_executor(tokio_executor_trait::Tokio::current())
-        .with_reactor(tokio_reactor_trait::Tokio);
+        .with_reactor(tokio_reactor_trait::Tokio)
+        .with_connection_name(LongString::from(cfg.app_name));
 
     let connection = Connection::connect(uri, options).await.unwrap();
     let channel = connection.create_channel().await.unwrap();
@@ -69,4 +76,6 @@ async fn main() {
         .unwrap()
         .await
         .unwrap();
+
+    Ok(())
 }

@@ -63,6 +63,7 @@ dependencies = [
 name = "amqp"
 version = "0.1.0"
 dependencies = [
+ "infra",
  "lapin",
  "tokio",
  "tokio-executor-trait",
