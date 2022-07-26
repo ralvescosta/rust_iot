@@ -4,10 +4,11 @@ members = [
     "app",
     "domain",
     "infra",
+    "s.amqp",
     "s.grpc",
     "s.http",
     "s.mqtt"
 ]
 
 
-default-members = ["s.mqtt", "s.grpc", "s.http"]
+default-members = ["s.amqp", "s.mqtt", "s.grpc", "s.http"]

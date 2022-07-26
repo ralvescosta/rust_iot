@@ -34,4 +34,18 @@ impl Config {
             enable_rumqttc_logging: false,
         })
     }
+
+    #[cfg(test)]
+    pub fn mock() -> Box<Self> {
+        Box::new(Config {
+            app_name: "app-name",
+            env: Environment::Local,
+            mqtt_host: "localhost",
+            mqtt_port: 1883,
+            mqtt_user: "mqtt_user",
+            mqtt_password: "password",
+            log_level: "debug",
+            enable_rumqttc_logging: false,
+        })
+    }
 }

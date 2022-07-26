@@ -1,6 +1,7 @@
 pub mod types;
 
 use crate::env::Config;
+use crate::errors::InternalError;
 use types::{IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage};
 
 use async_trait::async_trait;
@@ -8,7 +9,7 @@ use bytes::Bytes;
 use log::{debug, error};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 
-use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use self::types::IController;
 
@@ -21,16 +22,16 @@ pub trait IMQTT {
         qos: QoS,
         kind: MetadataKind,
         controller: Arc<dyn IController + Sync + Send>,
-    ) -> Result<(), Box<dyn Error>>;
+    ) -> Result<(), InternalError>;
     async fn publish(
         &self,
         topic: &str,
         qos: QoS,
         retain: bool,
         payload: &[u8],
-    ) -> Result<(), Box<dyn Error>>;
-    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, ()>;
-    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, ()>;
+    ) -> Result<(), InternalError>;
+    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, InternalError>;
+    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, InternalError>;
     fn handle_event(&self, event: &Event);
 }
 
@@ -47,6 +48,18 @@ impl MQTT {
             cfg,
             client: None,
             dispatchers: HashMap::default(),
+        })
+    }
+
+    #[cfg(test)]
+    pub fn mock(
+        cfg: Box<Config>,
+        dispatchers: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>>,
+    ) -> Box<dyn IMQTT + Send + Sync> {
+        Box::new(MQTT {
+            cfg,
+            client: None,
+            dispatchers,
         })
     }
 }
@@ -74,10 +87,14 @@ impl IMQTT for MQTT {
         qos: QoS,
         kind: MetadataKind,
         controller: Arc<dyn IController + Sync + Send>,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), InternalError> {
         debug!("subscribing in topic: {:?}...", topic);
 
-        self.client.clone().unwrap().subscribe(topic, qos).await?;
+        let res = self.client.clone().unwrap().subscribe(topic, qos).await;
+        if res.is_err() {
+            error!("subscribe error - {:?}", res);
+            return Err(InternalError::new("subscribe error"));
+        }
 
         self.dispatchers.insert(kind, controller);
 
@@ -91,30 +108,36 @@ impl IMQTT for MQTT {
         qos: QoS,
         retain: bool,
         payload: &[u8],
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), InternalError> {
         debug!("publishing in a topic {:?}", topic);
 
-        self.client
+        let res = self
+            .client
             .clone()
             .unwrap()
             .publish(topic, qos, retain, payload)
-            .await?;
+            .await;
+        if res.is_err() {
+            error!("publish error - {:?}", res);
+            return Err(InternalError::new("publish error"));
+        }
 
         debug!("message published");
         Ok(())
     }
 
-    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, ()> {
+    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, InternalError> {
         let splitted = topic.split("/").collect::<Vec<&str>>();
         if splitted.len() < 3 && splitted[0] != "iot" {
             error!("unformatted topic");
-            return Err(());
+            return Err(InternalError::new("unformatted topic"));
         }
 
         match splitted[2] {
             "temp" => {
                 if splitted.len() < 4 {
-                    return Err(());
+                    error!("wrong temp topic");
+                    return Err(InternalError::new("wrong temp topic"));
                 }
 
                 Ok(MessageMetadata {
@@ -124,24 +147,25 @@ impl IMQTT for MQTT {
             }
             _ => {
                 error!("unknown message kind");
-                Err(())
+                Err(InternalError::new("unknown message kind"))
             }
         }
     }
 
-    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, ()> {
+    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, InternalError> {
         match kind {
             MetadataKind::IoT(IoTServiceKind::Temp) => {
                 let msg = serde_json::from_slice::<TempMessage>(payload);
                 if msg.is_err() {
-                    return Err(());
+                    error!("msg conversion error - {:?}", msg);
+                    return Err(InternalError::new("msg conversion erro"));
                 }
 
                 Ok(Message::Temp(msg.unwrap()))
             }
             _ => {
                 error!("unknown message kind");
-                Err(())
+                Err(InternalError::new("unknown message kind"))
             }
         }
     }
@@ -181,11 +205,109 @@ impl IMQTT for MQTT {
 
 #[cfg(test)]
 mod tests {
+    use rumqttc::Publish;
+
     use super::*;
 
     #[test]
-    fn test_connect() {
-        let mut mq = MQTT::new(Config::new());
-        let mut a = mq.connect();
+    fn should_connect() {
+        let mut mq = MQTT::new(Config::mock());
+        mq.connect();
+    }
+
+    #[test]
+    fn should_get_metadata_successfully() {
+        let mq = MQTT::new(Config::mock());
+
+        let res = mq.get_metadata("iot/data/temp/device_id/location".to_owned());
+        assert!(res.is_ok());
+
+        let res = res.unwrap();
+        let kind = res.kind;
+        assert_eq!(kind, MetadataKind::IoT(IoTServiceKind::Temp));
+    }
+
+    #[test]
+    fn should_get_metadata_err() {
+        let mq = MQTT::new(Config::mock());
+
+        let res = mq.get_metadata("iot/data/temp".to_owned());
+        assert!(res.is_err());
+
+        let res = mq.get_metadata("wrong/data/temp".to_owned());
+        assert!(res.is_err());
+
+        let res = mq.get_metadata("iot/data/unknown/device_id/location".to_owned());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn should_get_message_successfully() {
+        let mq = MQTT::new(Config::mock());
+
+        let res = mq.get_message(
+            &MetadataKind::IoT(IoTServiceKind::Temp),
+            &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn should_get_message_err() {
+        let mq = MQTT::new(Config::mock());
+
+        let res = mq.get_message(
+            &MetadataKind::IoT(IoTServiceKind::Temp),
+            &Bytes::try_from("").unwrap(),
+        );
+        assert!(res.is_err());
+
+        let res = mq.get_message(
+            &MetadataKind::IoT(IoTServiceKind::GPS),
+            &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+        );
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn should_handle_event_successfully() {
+        // let map = HashMap::default();
+        // map.insert(MetadataKind::IoT(IoTServiceKind::Temp), );
+
+        // let mq = MQTT::mock(Config::mock(), map);
+
+        // let event = Event::Incoming(Packet::Publish(Publish {
+        //     dup: true,
+        //     payload: Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+        //     pkid: 10,
+        //     qos: QoS::AtMostOnce,
+        //     retain: false,
+        //     topic: "iot/data/temp/device_id/location".to_owned(),
+        // }));
+
+        // mq.handle_event(&event);
+    }
+
+    #[test]
+    fn should_handle_event_err() {
+        let map = HashMap::default();
+
+        let mq = MQTT::mock(Config::mock(), map);
+
+        let mut publish = Publish {
+            dup: true,
+            payload: Bytes::try_from("").unwrap(),
+            pkid: 10,
+            qos: QoS::AtMostOnce,
+            retain: false,
+            topic: "".to_owned(),
+        };
+        mq.handle_event(&Event::Incoming(Packet::Publish(publish.clone())));
+
+        publish.topic = "iot/data/temp/device_id/location".to_owned();
+        mq.handle_event(&Event::Incoming(Packet::Publish(publish.clone())));
+
+        publish.payload = Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap();
+        mq.handle_event(&Event::Incoming(Packet::Publish(publish.clone())));
     }
 }
