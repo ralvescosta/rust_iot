@@ -1,3 +1,6 @@
+#[cfg(test)]
+use mockall::predicate::*;
+
 pub mod types;
 
 use crate::env::Config;
@@ -208,6 +211,7 @@ mod tests {
     use rumqttc::Publish;
 
     use super::*;
+    use crate::mqtt::types::MockIController;
 
     #[test]
     fn should_connect() {
@@ -271,21 +275,41 @@ mod tests {
 
     #[test]
     fn should_handle_event_successfully() {
-        // let map = HashMap::default();
-        // map.insert(MetadataKind::IoT(IoTServiceKind::Temp), );
+        let mut mocked_controller = MockIController::new();
 
-        // let mq = MQTT::mock(Config::mock(), map);
+        mocked_controller
+            .expect_exec()
+            .with(
+                eq(MessageMetadata {
+                    kind: MetadataKind::IoT(IoTServiceKind::Temp),
+                    topic: "iot/data/temp/device_id/location".to_owned(),
+                }),
+                eq(Message::Temp(TempMessage {
+                    temp: 39.9,
+                    time: 99999999,
+                })),
+            )
+            .times(1)
+            .returning(|_msg, _meta| ());
 
-        // let event = Event::Incoming(Packet::Publish(Publish {
-        //     dup: true,
-        //     payload: Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
-        //     pkid: 10,
-        //     qos: QoS::AtMostOnce,
-        //     retain: false,
-        //     topic: "iot/data/temp/device_id/location".to_owned(),
-        // }));
+        let mut map: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>> = HashMap::default();
+        map.insert(
+            MetadataKind::IoT(IoTServiceKind::Temp),
+            Arc::new(mocked_controller),
+        );
 
-        // mq.handle_event(&event);
+        let mq = MQTT::mock(Config::mock(), map);
+
+        let event = Event::Incoming(Packet::Publish(Publish {
+            dup: true,
+            payload: Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+            pkid: 10,
+            qos: QoS::AtMostOnce,
+            retain: false,
+            topic: "iot/data/temp/device_id/location".to_owned(),
+        }));
+
+        mq.handle_event(&event);
     }
 
     #[test]
