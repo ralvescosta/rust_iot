@@ -1,7 +1,7 @@
 version: "3"
 
 services:
-  mqtt:
+  mosquitto:
     build:
       context: .
       dockerfile: Dockerfile.mosquitto
@@ -11,3 +11,23 @@ services:
     volumes:
       - /mosquitto/data
       - /mosquitto/log
+
+  rabbitmq:
+    build: 
+      context: .
+      dockerfile: Dockerfile.rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=admin
+      - RABBITMQ_DEFAULT_PASS=password
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+  
+  postgresql:
+    image: postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=postgres
+    ports:
+      - 5432:5432
