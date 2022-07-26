@@ -1,5 +1,7 @@
 # Rust IoT Example
 
+[![codecov](https://codecov.io/gh/ralvescosta/rust_iot/branch/main/graph/badge.svg?token=V2P3HX5DEU)](https://codecov.io/gh/ralvescosta/rust_iot)
+
 :warning::construction: **Work In Progress** :construction::warning:
 
 This project was built to understand the maturity of the RustLag ecosystem for the most common IoT Tools, such as: MQTT and RabbitMQ. In this project was build a simples example which receive sames messages through MQTT 3.1.1, republish those messages to RabbitMQ and handle the RabbitMQ events to save this data, and also was created a HTTP and gRPC interface to get the information that has been saved. Was created four binary mqtt, rabbitmq, grpc and http which for the respective protocol.
