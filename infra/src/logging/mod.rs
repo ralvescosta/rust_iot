@@ -62,3 +62,57 @@ fn get_log_level_filter(cfg: &Config) -> LevelFilter {
         _ => LevelFilter::OFF,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn setup_successfully() {
+        let res = setup(&Config::mock());
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn get_log_level_successfully() {
+        let mut cfg = Config::mock();
+
+        cfg.log_level = "debug";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::DEBUG);
+        cfg.log_level = "Debug";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::DEBUG);
+        cfg.log_level = "DEBUG";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::DEBUG);
+
+        cfg.log_level = "info";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::INFO);
+        cfg.log_level = "Info";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::INFO);
+        cfg.log_level = "INFO";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::INFO);
+
+        cfg.log_level = "warn";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::WARN);
+        cfg.log_level = "Warn";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::WARN);
+        cfg.log_level = "WARN";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::WARN);
+
+        cfg.log_level = "error";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::ERROR);
+        cfg.log_level = "Error";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::ERROR);
+        cfg.log_level = "ERROR";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::ERROR);
+
+        cfg.log_level = "trace";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::TRACE);
+        cfg.log_level = "Trace";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::TRACE);
+        cfg.log_level = "TRACE";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::TRACE);
+
+        cfg.log_level = "UNKNOWN";
+        assert_eq!(get_log_level_filter(&cfg), LevelFilter::OFF);
+    }
+}
