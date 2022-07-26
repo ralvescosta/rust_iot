@@ -4,7 +4,7 @@ use mockall::predicate::*;
 pub mod types;
 
 use crate::env::Config;
-use crate::errors::InternalError;
+use crate::errors::MqttError;
 use types::{IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage};
 
 use async_trait::async_trait;
@@ -25,16 +25,16 @@ pub trait IMQTT {
         qos: QoS,
         kind: MetadataKind,
         controller: Arc<dyn IController + Sync + Send>,
-    ) -> Result<(), InternalError>;
+    ) -> Result<(), MqttError>;
     async fn publish(
         &self,
         topic: &str,
         qos: QoS,
         retain: bool,
         payload: &[u8],
-    ) -> Result<(), InternalError>;
-    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, InternalError>;
-    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, InternalError>;
+    ) -> Result<(), MqttError>;
+    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, MqttError>;
+    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, MqttError>;
     fn handle_event(&self, event: &Event);
 }
 
@@ -90,13 +90,13 @@ impl IMQTT for MQTT {
         qos: QoS,
         kind: MetadataKind,
         controller: Arc<dyn IController + Sync + Send>,
-    ) -> Result<(), InternalError> {
+    ) -> Result<(), MqttError> {
         debug!("subscribing in topic: {:?}...", topic);
 
         let res = self.client.clone().unwrap().subscribe(topic, qos).await;
         if res.is_err() {
             error!("subscribe error - {:?}", res);
-            return Err(InternalError::new("subscribe error"));
+            return Err(MqttError::InternalError {});
         }
 
         self.dispatchers.insert(kind, controller);
@@ -111,7 +111,7 @@ impl IMQTT for MQTT {
         qos: QoS,
         retain: bool,
         payload: &[u8],
-    ) -> Result<(), InternalError> {
+    ) -> Result<(), MqttError> {
         debug!("publishing in a topic {:?}", topic);
 
         let res = self
@@ -122,25 +122,25 @@ impl IMQTT for MQTT {
             .await;
         if res.is_err() {
             error!("publish error - {:?}", res);
-            return Err(InternalError::new("publish error"));
+            return Err(MqttError::InternalError {});
         }
 
         debug!("message published");
         Ok(())
     }
 
-    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, InternalError> {
+    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, MqttError> {
         let splitted = topic.split("/").collect::<Vec<&str>>();
         if splitted.len() < 3 && splitted[0] != "iot" {
             error!("unformatted topic");
-            return Err(InternalError::new("unformatted topic"));
+            return Err(MqttError::UnformattedTopic {});
         }
 
         match splitted[2] {
             "temp" => {
                 if splitted.len() < 4 {
                     error!("wrong temp topic");
-                    return Err(InternalError::new("wrong temp topic"));
+                    return Err(MqttError::UnformattedTopic {});
                 }
 
                 Ok(MessageMetadata {
@@ -150,25 +150,25 @@ impl IMQTT for MQTT {
             }
             _ => {
                 error!("unknown message kind");
-                Err(InternalError::new("unknown message kind"))
+                return Err(MqttError::UnknownMessageKind {});
             }
         }
     }
 
-    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, InternalError> {
+    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, MqttError> {
         match kind {
             MetadataKind::IoT(IoTServiceKind::Temp) => {
                 let msg = serde_json::from_slice::<TempMessage>(payload);
                 if msg.is_err() {
                     error!("msg conversion error - {:?}", msg);
-                    return Err(InternalError::new("msg conversion erro"));
+                    return Err(MqttError::InternalError {});
                 }
 
                 Ok(Message::Temp(msg.unwrap()))
             }
             _ => {
                 error!("unknown message kind");
-                Err(InternalError::new("unknown message kind"))
+                return Err(MqttError::UnknownMessageKind {});
             }
         }
     }

@@ -1,2 +1,2 @@
-# ignore:
-#     - "**/main.rs"
+ignore:
+    - "**/main.rs"
