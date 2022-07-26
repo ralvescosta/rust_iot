@@ -1,0 +1,33 @@
+name: ci
+
+on:
+  push:
+    branches: 
+      - "*"
+  pull_request:
+    branches: 
+      - "develop"
+      - "main"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: codecov/codecov-action@v3
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        # fail_ci_if_error: true
+        verbose: true
+    
+    - name: Install and Build
+      run: |
+        cargo install cargo-tarpaulin
+        cargo build --verbose
+      
+    - name: Run tests
+      run: cargo tarpaulin --out Xml
