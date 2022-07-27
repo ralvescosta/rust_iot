@@ -13,12 +13,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
     logging::setup(&cfg)?;
 
-    let uri = "amqp://admin:password@localhost:5672/";
+    let uri = "amqp://admin:password@localhost:5672";
     let options = ConnectionProperties::default()
         // Use tokio executor and reactor.
         // At the moment the reactor is only available for unix.
-        .with_executor(tokio_executor_trait::Tokio::current())
-        .with_reactor(tokio_reactor_trait::Tokio)
         .with_connection_name(LongString::from(cfg.app_name));
 
     let connection = Connection::connect(uri, options).await.unwrap();
@@ -55,9 +53,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 return;
             }
         };
+        dbg!("received msg: ");
 
         // Do something with the delivery data (The message payload)
-
         delivery
             .ack(BasicAckOptions::default())
             .await
@@ -76,6 +74,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .unwrap()
         .await
         .unwrap();
+
+    loop {}
 
     Ok(())
 }

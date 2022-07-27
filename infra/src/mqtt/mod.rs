@@ -16,6 +16,13 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use self::types::IController;
 
+use opentelemetry::{global, sdk::trace as sdktrace};
+use opentelemetry::{
+    metrics,
+    trace::{TraceContextExt, Tracer},
+    Context, Key, KeyValue,
+};
+
 #[async_trait]
 pub trait IMQTT {
     fn connect(&mut self) -> EventLoop;
@@ -175,6 +182,8 @@ impl IMQTT for MQTT {
 
     fn handle_event(&self, event: &Event) {
         if let Event::Incoming(Packet::Publish(msg)) = event.to_owned() {
+            let tracer = global::tracer("ex.com/basic");
+
             debug!("message received in a topic {:?}", msg.topic);
 
             let metadata = self.get_metadata(msg.topic);
@@ -184,24 +193,31 @@ impl IMQTT for MQTT {
             }
             let metadata = metadata.unwrap();
 
-            let data = self.get_message(&metadata.kind, &msg.payload);
-            if data.is_err() {
-                debug!("ignored message");
-                return;
-            }
-            let data = data.unwrap();
+            tracer.in_span("mqtt::msg::temp", |ctx| {
+                let span = ctx.span();
+                span.add_event("mqtt message received".to_string(), vec![]);
+                span.set_attribute(Key::from_static_str("entity.type").string("APPLICATION"));
 
-            let controller = self.dispatchers.get(&metadata.kind);
-            if controller.is_none() {
-                debug!("ignored message");
-                return;
-            }
+                let data = self.get_message(&metadata.kind, &msg.payload);
+                if data.is_err() {
+                    debug!("ignored message");
+                    return;
+                }
+                let data = data.unwrap();
 
-            debug!("processing msg...");
+                let controller = self.dispatchers.get(&metadata.kind);
+                if controller.is_none() {
+                    debug!("ignored message");
+                    return;
+                }
 
-            controller.unwrap().exec(&metadata, &data);
+                debug!("processing msg...");
 
-            debug!("msg was processed");
+                controller.unwrap().exec(&metadata, &data);
+
+                debug!("msg was processed");
+                span.set_attribute(Key::from_static_str("result").string("success"));
+            });
         }
     }
 }

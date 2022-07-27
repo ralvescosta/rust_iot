@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 #[cfg(test)]
 use mockall::automock;
 
@@ -16,10 +18,22 @@ pub enum MetadataKind {
     Log,
 }
 
+impl Display for MetadataKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct MessageMetadata {
     pub kind: MetadataKind,
     pub topic: String,
+}
+
+impl Display for MessageMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]

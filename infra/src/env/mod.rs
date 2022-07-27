@@ -19,6 +19,12 @@ pub struct Config {
 
     pub log_level: &'static str,
     pub enable_rumqttc_logging: bool,
+
+    pub amqp_host: &'static str,
+    pub amqp_port: u16,
+    pub amqp_user: &'static str,
+    pub amqp_password: &'static str,
+    pub amqp_vhost: &'static str,
 }
 
 impl Config {
@@ -32,7 +38,19 @@ impl Config {
             mqtt_password: "password",
             log_level: "debug",
             enable_rumqttc_logging: false,
+            amqp_host: "localhost",
+            amqp_port: 5672,
+            amqp_user: "admin",
+            amqp_password: "password",
+            amqp_vhost: "",
         })
+    }
+
+    pub fn amqp_uri(&self) -> String {
+        format!(
+            "amqp://{}{}@{}:{}{}",
+            self.amqp_user, self.amqp_password, self.amqp_host, self.amqp_port, self.amqp_vhost
+        )
     }
 
     #[cfg(test)]
@@ -46,6 +64,11 @@ impl Config {
             mqtt_password: "password",
             log_level: "debug",
             enable_rumqttc_logging: false,
+            amqp_host: "amqp://localhost",
+            amqp_port: 5672,
+            amqp_user: "admin",
+            amqp_password: "password",
+            amqp_vhost: "",
         })
     }
 }
