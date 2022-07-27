@@ -1,13 +1,5 @@
-use thiserror::Error;
+mod logging;
+mod mqtt;
 
-#[derive(Error, Debug, PartialEq, Eq)]
-pub enum MqttError {
-    #[error("unknown message kind")]
-    UnknownMessageKind,
-
-    #[error("unformatted topic")]
-    UnformattedTopic,
-
-    #[error("mqtt internal error")]
-    InternalError,
-}
+pub use logging::LoggingError;
+pub use mqtt::MqttError;

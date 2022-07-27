@@ -12,12 +12,14 @@ use infra::{
 };
 
 use log::error;
+
 use std::error::Error;
 
 #[tokio::main(worker_threads = 1)]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
     logging::setup(&cfg)?;
+    tracing::setup()?;
 
     let delivery_service = DeliveryIoTMessageService::new();
 
