@@ -41,7 +41,7 @@ pub trait IMQTT {
 #[derive(Clone)]
 pub struct MQTT {
     cfg: Box<Config>,
-    client: Option<Arc<AsyncClient>>,
+    client: Option<AsyncClient>,
     dispatchers: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>>,
 }
 
@@ -79,7 +79,7 @@ impl IMQTT for MQTT {
 
         let (client, eventloop) = AsyncClient::new(mqtt_options, 50);
 
-        self.client = Some(Arc::new(client));
+        self.client = Some(client);
 
         eventloop
     }

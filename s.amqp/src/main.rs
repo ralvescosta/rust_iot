@@ -1,9 +1,9 @@
 use std::error::Error;
 
+use futures_util::StreamExt;
 use infra::{env::Config, logging};
 use lapin::{
-    message::DeliveryResult,
-    options::{BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions},
+    options::*,
     types::{FieldTable, LongString},
     BasicProperties, Connection, ConnectionProperties,
 };
@@ -14,53 +14,49 @@ async fn main() -> Result<(), Box<dyn Error>> {
     logging::setup(&cfg)?;
 
     let uri = "amqp://admin:password@localhost:5672";
-    let options = ConnectionProperties::default()
-        // Use tokio executor and reactor.
-        // At the moment the reactor is only available for unix.
-        .with_connection_name(LongString::from(cfg.app_name));
+    let options =
+        ConnectionProperties::default().with_connection_name(LongString::from(cfg.app_name));
 
     let connection = Connection::connect(uri, options).await.unwrap();
     let channel = connection.create_channel().await.unwrap();
 
-    let _queue = channel
+    let _queue1 = channel
         .queue_declare(
-            "queue_test",
+            "queue_test1",
             QueueDeclareOptions::default(),
             FieldTable::default(),
         )
         .await
         .unwrap();
 
-    let consumer = channel
+    let _queue2 = channel
+        .queue_declare(
+            "queue_test2",
+            QueueDeclareOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
+
+    let mut consumer1 = channel
         .basic_consume(
-            "queue_test",
-            "tag_foo",
+            "queue_test1",
+            "tag_foo1",
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
         .await
         .unwrap();
 
-    consumer.set_delegate(move |delivery: DeliveryResult| async move {
-        let delivery = match delivery {
-            // Carries the delivery alongside its channel
-            Ok(Some(delivery)) => delivery,
-            // The consumer got canceled
-            Ok(None) => return,
-            // Carries the error and is always followed by Ok(None)
-            Err(error) => {
-                dbg!("Failed to consume queue message {}", error);
-                return;
-            }
-        };
-        dbg!("received msg: ");
-
-        // Do something with the delivery data (The message payload)
-        delivery
-            .ack(BasicAckOptions::default())
-            .await
-            .expect("Failed to ack send_webhook_event message");
-    });
+    let mut consumer2 = channel
+        .basic_consume(
+            "queue_test2",
+            "tag_foo2",
+            BasicConsumeOptions::default(),
+            FieldTable::default(),
+        )
+        .await
+        .unwrap();
 
     channel
         .basic_publish(
@@ -75,7 +71,60 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .unwrap();
 
-    loop {}
+    let d1 = tokio::spawn(async move {
+        while let Some(delivery) = consumer1.next().await {
+            tokio::spawn(async move {
+                if delivery.is_err() {
+                    println!("err");
+                }
+                let delivery = match delivery {
+                    // Carries the delivery alongside its channel
+                    Ok(d) => d,
+                    // Carries the error and is always followed by Ok(None)
+                    Err(error) => {
+                        dbg!("Failed to consume queue message {}", error);
+                        return;
+                    }
+                };
+
+                println!("consumer received msg: {:?}", delivery.data);
+
+                delivery
+                    .ack(BasicAckOptions::default())
+                    .await
+                    .expect("Failed to ack send_webhook_event message");
+            });
+        }
+    });
+
+    let d2 = tokio::spawn(async move {
+        while let Some(delivery) = consumer2.next().await {
+            tokio::spawn(async move {
+                if delivery.is_err() {
+                    println!("err");
+                    return;
+                }
+                let delivery = match delivery {
+                    // Carries the delivery alongside its channel
+                    Ok(d) => d,
+                    // Carries the error and is always followed by Ok(None)
+                    Err(error) => {
+                        dbg!("Failed to consume queue message {}", error);
+                        return;
+                    }
+                };
+
+                println!("consumer received msg: {:?}", delivery.data);
+
+                delivery
+                    .ack(BasicAckOptions::default())
+                    .await
+                    .expect("Failed to ack send_webhook_event message");
+            });
+        }
+    });
+
+    tokio::join!(d1, d2);
 
     Ok(())
 }

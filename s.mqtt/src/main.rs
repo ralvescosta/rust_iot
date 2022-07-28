@@ -15,7 +15,7 @@ use log::error;
 
 use std::error::Error;
 
-#[tokio::main(worker_threads = 1)]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
     logging::setup(&cfg)?;
