@@ -25,12 +25,17 @@ pub struct Config {
     pub amqp_user: &'static str,
     pub amqp_password: &'static str,
     pub amqp_vhost: &'static str,
+
+    pub otlp_host: &'static str,
+    pub otlp_key: &'static str,
+    pub otlp_service_type: &'static str,
+    pub otlp_export_time: u64,
 }
 
 impl Config {
     pub fn new() -> Box<Self> {
         Box::new(Config {
-            app_name: "app-name",
+            app_name: "rust_iot",
             env: Environment::Local,
             mqtt_host: "localhost",
             mqtt_port: 1883,
@@ -43,6 +48,10 @@ impl Config {
             amqp_user: "admin",
             amqp_password: "password",
             amqp_vhost: "",
+            otlp_host: "https://otlp.nr-data.net:4317",
+            otlp_key: "",
+            otlp_service_type: "MQTT",
+            otlp_export_time: 10,
         })
     }
 
@@ -56,7 +65,7 @@ impl Config {
     #[cfg(test)]
     pub fn mock() -> Box<Self> {
         Box::new(Config {
-            app_name: "app-name",
+            app_name: "rust_iot",
             env: Environment::Local,
             mqtt_host: "localhost",
             mqtt_port: 1883,
@@ -69,6 +78,10 @@ impl Config {
             amqp_user: "admin",
             amqp_password: "password",
             amqp_vhost: "",
+            otlp_host: "https://otlp.nr-data.net:4317",
+            otlp_key: "",
+            otlp_service_type: "MQTT",
+            otlp_export_time: 10,
         })
     }
 }

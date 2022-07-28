@@ -5,10 +5,10 @@ use infra::{
     env::Config,
     logging,
     mqtt::{
+        client::MQTT,
         types::{IoTServiceKind, MetadataKind},
-        MQTT,
     },
-    tracing,
+    otel,
 };
 
 use log::error;
@@ -19,7 +19,7 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
     logging::setup(&cfg)?;
-    tracing::setup()?;
+    otel::tracing::setup(&cfg)?;
 
     let delivery_service = DeliveryIoTMessageService::new();
 
