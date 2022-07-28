@@ -17,9 +17,11 @@ impl IoTController {
 }
 
 impl IController for IoTController {
-    fn exec(&self, _meta: &MessageMetadata, _msg: &Message) {
+    fn exec(&self, _meta: &MessageMetadata, _msg: &Message) -> Result<(), ()> {
         info!("IoTController");
 
         self.service.delivery(10);
+
+        Ok(())
     }
 }

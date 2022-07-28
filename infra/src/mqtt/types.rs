@@ -49,5 +49,5 @@ pub enum Message {
 
 #[cfg_attr(test, automock)]
 pub trait IController {
-    fn exec(&self, meta: &MessageMetadata, msg: &Message);
+    fn exec(&self, meta: &MessageMetadata, msg: &Message) -> Result<(), ()>;
 }
