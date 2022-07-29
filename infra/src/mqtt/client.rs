@@ -1,20 +1,17 @@
-#[cfg(test)]
-use mockall::predicate::*;
-
-use async_trait::async_trait;
-use bytes::Bytes;
-use log::{debug, error};
-use opentelemetry::global;
-use opentelemetry::trace::{Span, SpanKind, StatusCode, Tracer};
-use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
-
-use std::{collections::HashMap, sync::Arc, time::Duration};
-
 use super::types::{
     IController, IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage,
 };
 use crate::env::Config;
 use crate::errors::MqttError;
+use async_trait::async_trait;
+use bytes::Bytes;
+use log::{debug, error};
+#[cfg(test)]
+use mockall::predicate::*;
+use opentelemetry::global;
+use opentelemetry::trace::{Span, SpanKind, StatusCode, Tracer};
+use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 #[async_trait]
 pub trait IMQTT {
@@ -184,8 +181,11 @@ impl IMQTT for MQTT {
             let metadata = metadata.unwrap();
 
             let tracer = global::tracer("handle_event");
+            let name = format!("mqtt::event::{:?}", metadata.kind);
+            let name: &str = Box::leak(name.into_boxed_str());
+
             let mut span = tracer
-                .span_builder("mqtt::event::temp")
+                .span_builder(name)
                 .with_kind(SpanKind::Consumer)
                 .start(&tracer);
 
@@ -324,13 +324,34 @@ mod tests {
 
     #[test]
     fn should_handle_event_err() {
-        let map = HashMap::default();
+        let mut mocked_controller = MockIController::new();
+
+        mocked_controller
+            .expect_exec()
+            .with(
+                eq(MessageMetadata {
+                    kind: MetadataKind::IoT(IoTServiceKind::Temp),
+                    topic: "iot/data/temp/device_id/location".to_owned(),
+                }),
+                eq(Message::Temp(TempMessage {
+                    temp: 39.9,
+                    time: 99999999,
+                })),
+            )
+            .times(1)
+            .returning(|_msg, _meta| Err(()));
+
+        let mut map: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>> = HashMap::default();
+        map.insert(
+            MetadataKind::IoT(IoTServiceKind::Temp),
+            Arc::new(mocked_controller),
+        );
 
         let mq = MQTT::mock(Config::mock(), map);
 
         let mut publish = Publish {
             dup: true,
-            payload: Bytes::try_from("").unwrap(),
+            payload: Bytes::new(),
             pkid: 10,
             qos: QoS::AtMostOnce,
             retain: false,

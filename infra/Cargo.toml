@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 app = { path = "../app" }
+# my-secret-crate = { git = "ssh://git@github.com/hedrosistemas/pkg_rustkit.git", branch = "main" }
 async-trait = { version = "0.1.56" }
 bytes = { version = "1.2.0", features = ["serde"] }
 rumqttc = { version =  "0.13.0" }

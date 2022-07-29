@@ -1,7 +1,6 @@
 use super::env::Config;
 use crate::env::Environment;
 use crate::errors::LoggingError;
-
 use tracing_bunyan_formatter::BunyanFormattingLayer;
 use tracing_log::LogTracer;
 use tracing_subscriber::{

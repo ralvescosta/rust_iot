@@ -57,7 +57,7 @@ impl Config {
 
     pub fn amqp_uri(&self) -> String {
         format!(
-            "amqp://{}{}@{}:{}{}",
+            "amqp://{}:{}@{}:{}{}",
             self.amqp_user, self.amqp_password, self.amqp_host, self.amqp_port, self.amqp_vhost
         )
     }
