@@ -8,6 +8,7 @@ use opentelemetry::global;
 use opentelemetry::trace::{Span, SpanKind, StatusCode, Tracer};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 
+use std::borrow::Cow;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use super::types::{
@@ -184,8 +185,11 @@ impl IMQTT for MQTT {
             let metadata = metadata.unwrap();
 
             let tracer = global::tracer("handle_event");
+            let name = format!("mqtt::event::{}", metadata.kind);
+            let name: &str = Box::leak(name.into_boxed_str());
+
             let mut span = tracer
-                .span_builder("mqtt::event::temp")
+                .span_builder(name)
                 .with_kind(SpanKind::Consumer)
                 .start(&tracer);
 

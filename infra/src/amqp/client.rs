@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
+use super::topology::AmqpTopology;
 use crate::{env::Config, errors::AmqpError};
 use async_trait::async_trait;
 use lapin::{
-    options::{ExchangeDeclareOptions, QueueDeclareOptions},
+    options::{ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
+    topology,
     types::{FieldTable, LongString},
     Channel, Connection, ConnectionProperties, ExchangeKind, Queue,
 };
@@ -26,18 +28,12 @@ pub trait IAmqp {
         durable: bool,
         internal: bool,
     ) -> Result<(), AmqpError>;
-    async fn declare_topology(&self, topology: AmqpTopology) -> Result<(), AmqpError>;
+    async fn install_topology(&self, topology: AmqpTopology) -> Result<(), AmqpError>;
 }
 
 pub struct Amqp {
     conn: Connection,
     channel: Channel,
-}
-
-pub struct AmqpTopology {
-    // pub queues; // all queues and the configurations like: name, type, binds
-    // pub exchanges; // all exchanges and the configurations like: name, type, binds
-    // pub consumers; // all consumer
 }
 
 impl Amqp {
@@ -118,41 +114,59 @@ impl IAmqp for Amqp {
             .map_err(|_| AmqpError::ChannelError {})
     }
 
-    async fn declare_topology(&self, topology: AmqpTopology) -> Result<(), AmqpError> {
+    async fn install_topology(&self, topology: AmqpTopology) -> Result<(), AmqpError> {
         //declare exchanges
         //declare queues with DLQ and TTL queues to retry strategy
         //binds exchanges -> queue
         //binds exchange -> exchange
+        for exch in topology.exchanges {
+            self.channel
+                .exchange_declare(
+                    exch.name,
+                    ExchangeKind::Direct,
+                    ExchangeDeclareOptions {
+                        auto_delete: false,
+                        durable: true,
+                        internal: false,
+                        nowait: false,
+                        passive: false,
+                    },
+                    FieldTable::default(),
+                )
+                .await
+                .map_err(|_| AmqpError::DeclareExchangeError {})?;
+        }
+
+        for queue in topology.queues {
+            self.channel
+                .queue_declare(
+                    queue.name,
+                    QueueDeclareOptions {
+                        passive: false,
+                        durable: true,
+                        exclusive: true,
+                        auto_delete: false,
+                        nowait: false,
+                    },
+                    FieldTable::default(),
+                )
+                .await
+                .map_err(|_| AmqpError::DeclareQueueError)?;
+
+            for bind in queue.bindings {
+                self.channel
+                    .queue_bind(
+                        bind.queue,
+                        bind.exchange,
+                        bind.routing_key,
+                        QueueBindOptions { nowait: false },
+                        FieldTable::default(),
+                    )
+                    .await
+                    .map_err(|_| AmqpError::DeclareQueueError {})?;
+            }
+        }
+
         Ok(())
-    }
-}
-
-pub struct AmqpTopologyBuilder {
-    cfg: &'static Config,
-}
-
-impl AmqpTopologyBuilder {
-    pub fn new(cfg: &'static Config) -> Self {
-        AmqpTopologyBuilder { cfg }
-    }
-
-    pub fn queue(&self) -> &Self {
-        self
-    }
-
-    pub fn exchange(&self) -> &Self {
-        self
-    }
-
-    pub fn with_dql(&self) -> &Self {
-        self
-    }
-
-    pub fn with_retry(&self) -> &Self {
-        return self;
-    }
-
-    pub async fn build(&self) -> Result<Arc<dyn IAmqp + Send + Sync>, AmqpError> {
-        Amqp::new(self.cfg).await
     }
 }
