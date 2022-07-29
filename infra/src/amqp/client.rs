@@ -3,7 +3,7 @@ use crate::{env::Config, errors::AmqpError};
 use async_trait::async_trait;
 use lapin::{
     options::{ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
-    types::{AMQPValue, FieldTable, LongString, ShortString},
+    types::{AMQPValue, FieldTable, LongInt, LongString, ShortString},
     Channel, Connection, ConnectionProperties, ExchangeKind, Queue,
 };
 use log::debug;
@@ -140,11 +140,8 @@ impl IAmqp for Amqp {
     }
 
     async fn install_topology(&self, topology: AmqpTopology) -> Result<(), AmqpError> {
-        //declare exchanges
-        //declare queues with DLQ and TTL queues to retry strategy
-        //binds exchanges -> queue
-        debug!("creating exchanges...");
         for exch in topology.exchanges {
+            debug!("creating exchange: {}", exch.name);
             self.channel
                 .exchange_declare(
                     exch.name,
@@ -160,14 +157,14 @@ impl IAmqp for Amqp {
                 )
                 .await
                 .map_err(|_| AmqpError::DeclareExchangeError(exch.name.to_owned()))?;
+            debug!("exchange: {} was created", exch.name);
         }
-        debug!("exchanges created");
 
-        debug!("creating and binding queues...");
         for queue in topology.queues {
+            debug!("creating and binding queue: {}", queue.name);
             self.install_queues(&queue).await?;
+            debug!("queue: {} was created and bonded", queue.name);
         }
-        debug!("queues created and bonded");
 
         Ok(())
     }
@@ -175,8 +172,8 @@ impl IAmqp for Amqp {
 
 impl Amqp {
     async fn install_queues<'i>(&self, def: &'i QueueDefinition) -> Result<(), AmqpError> {
-        self.install_retry(def).await?;
-        let map = self.install_dlq(def).await?;
+        let queue_map = self.install_retry(def).await?;
+        let queue_map = self.install_dlq(def, queue_map).await?;
 
         self.channel
             .queue_declare(
@@ -188,7 +185,7 @@ impl Amqp {
                     auto_delete: false,
                     nowait: false,
                 },
-                FieldTable::from(map),
+                FieldTable::from(queue_map),
             )
             .await
             .map_err(|_| AmqpError::DeclareQueueError(def.name.to_owned()))?;
@@ -223,15 +220,18 @@ impl Amqp {
         }
 
         debug!("creating retry...");
-        let mut map = BTreeMap::new();
-        map.insert(
+        let mut retry_map = BTreeMap::new();
+        retry_map.insert(
             ShortString::from("x-dead-letter-exchange"),
-            AMQPValue::LongString(LongString::from(self.dlq_name(def.name))),
+            AMQPValue::LongString(LongString::from("")),
         );
-
-        map.insert(
+        retry_map.insert(
             ShortString::from("x-dead-letter-routing-key"),
-            AMQPValue::LongString(LongString::from(self.retry_key(def.name))),
+            AMQPValue::LongString(LongString::from(def.name)),
+        );
+        retry_map.insert(
+            ShortString::from("x-message-ttl"),
+            AMQPValue::LongInt(LongInt::from(18000)),
         );
 
         let name = self.retry_name(def.name);
@@ -245,35 +245,51 @@ impl Amqp {
                     auto_delete: false,
                     nowait: false,
                 },
-                FieldTable::default(),
+                FieldTable::from(retry_map),
             )
             .await
-            .map_err(|_| AmqpError::DeclareQueueError(name))?;
+            .map_err(|_| AmqpError::DeclareQueueError(name.clone()))?;
 
-        Ok(map)
+        let mut queue_map = BTreeMap::new();
+        queue_map.insert(
+            ShortString::from("x-dead-letter-exchange"),
+            AMQPValue::LongString(LongString::from("")),
+        );
+
+        queue_map.insert(
+            ShortString::from("x-dead-letter-routing-key"),
+            AMQPValue::LongString(LongString::from(name)),
+        );
+        debug!("retry created");
+
+        Ok(queue_map)
     }
 
     async fn install_dlq<'i>(
         &self,
         def: &'i QueueDefinition,
+        queue_map_from_retry: BTreeMap<ShortString, AMQPValue>,
     ) -> Result<BTreeMap<ShortString, AMQPValue>, AmqpError> {
-        if !def.with_dlq {
+        if !def.with_dlq && !def.with_retry {
             return Ok(BTreeMap::new());
         }
 
         debug!("creating DLQ...");
-        let mut map = BTreeMap::new();
-        map.insert(
-            ShortString::from("x-dead-letter-exchange"),
-            AMQPValue::LongString(LongString::from("")),
-        );
-
-        map.insert(
-            ShortString::from("x-dead-letter-routing-key"),
-            AMQPValue::LongString(LongString::from(self.dlq_key(def.name))),
-        );
-
+        let mut queue_map = queue_map_from_retry;
         let name = self.dlq_name(def.name);
+
+        if !def.with_retry {
+            queue_map.insert(
+                ShortString::from("x-dead-letter-exchange"),
+                AMQPValue::LongString(LongString::from("")),
+            );
+
+            queue_map.insert(
+                ShortString::from("x-dead-letter-routing-key"),
+                AMQPValue::LongString(LongString::from(name.clone())),
+            );
+        }
+
         self.channel
             .queue_declare(
                 &name,
@@ -290,14 +306,14 @@ impl Amqp {
             .map_err(|_| AmqpError::DeclareQueueError(name))?;
         debug!("DLQ created");
 
-        Ok(map)
+        Ok(queue_map)
     }
 
     fn retry_name(&self, queue: &str) -> String {
         format!("{}-retry", queue)
     }
 
-    fn retry_key(&self, queue: &str) -> String {
+    fn _retry_key(&self, queue: &str) -> String {
         format!("{}-retry-key", queue)
     }
 
@@ -305,7 +321,7 @@ impl Amqp {
         format!("{}-dlq", queue)
     }
 
-    fn dlq_key(&self, queue: &str) -> String {
+    fn _dlq_key(&self, queue: &str) -> String {
         format!("{}-dlq-key", queue)
     }
 }
