@@ -825,6 +825,7 @@ dependencies = [
  "app",
  "async-trait",
  "bytes",
+ "futures-util",
  "lapin",
  "log",
  "mockall",

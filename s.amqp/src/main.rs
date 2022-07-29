@@ -1,9 +1,13 @@
 use std::error::Error;
 
-// use futures_util::StreamExt;
+mod consumers;
+use consumers::iot::IoTConsumer;
 use infra::{
     amqp::client::Amqp,
-    amqp::topology::{AmqpTopology, ExchangeDefinition, QueueBindingDefinition, QueueDefinition},
+    amqp::topology::{
+        AmqpTopology, ConsumerDefinition, ExchangeDefinition, QueueBindingDefinition,
+        QueueDefinition,
+    },
     env::Config,
     logging,
 };
@@ -12,6 +16,12 @@ use infra::{
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
     logging::setup(&cfg)?;
+
+    let iot = IoTConsumer::new();
+
+    let consumer_def = ConsumerDefinition::name("name")
+        .queue("queue")
+        .handler(&iot);
 
     let topology = AmqpTopology::new()
         .exchange(ExchangeDefinition::name("exchange_top_test1").direct())
@@ -24,7 +34,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     "queue_top_test1",
                     "exchange_top_test1_queue_top_test1",
                 )),
-        );
+        )
+        .consumer(consumer_def);
 
     let amqp = Amqp::new(&cfg).await?;
 

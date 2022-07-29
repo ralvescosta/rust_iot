@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::errors::AmqpError;
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -102,7 +104,7 @@ pub trait ConsumerHandler {
 pub struct ConsumerDefinition {
     pub name: &'static str,
     pub queue: &'static str,
-    pub handler: Option<Box<dyn ConsumerHandler + Send + Sync>>,
+    pub handler: Option<&'static Arc<dyn ConsumerHandler + Send + Sync>>,
 }
 
 impl ConsumerDefinition {
@@ -119,7 +121,7 @@ impl ConsumerDefinition {
         self
     }
 
-    pub fn handler(mut self, handler: Box<dyn ConsumerHandler + Send + Sync>) -> Self {
+    pub fn handler(mut self, handler: &'static Arc<dyn ConsumerHandler + Send + Sync>) -> Self {
         self.handler = Some(handler);
         self
     }

@@ -1,13 +1,20 @@
-use super::topology::{AmqpTopology, QueueDefinition};
+use super::topology::{
+    self, AmqpTopology, ConsumerDefinition, ExchangeDefinition, QueueDefinition,
+};
 use crate::{env::Config, errors::AmqpError};
 use async_trait::async_trait;
+use futures_util::StreamExt;
 use lapin::{
-    options::{ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
+    options::{
+        BasicAckOptions, BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions,
+        QueueDeclareOptions,
+    },
     types::{AMQPValue, FieldTable, LongInt, LongString, ShortString},
-    Channel, Connection, ConnectionProperties, ExchangeKind, Queue,
+    Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
 };
-use log::debug;
+use log::{debug, error};
 use std::{collections::BTreeMap, sync::Arc};
+use tokio::task::JoinHandle;
 
 #[async_trait]
 pub trait IAmqp {
@@ -33,7 +40,12 @@ pub trait IAmqp {
         queue: &str,
         key: &str,
     ) -> Result<(), AmqpError>;
-    async fn install_topology(&self, topology: AmqpTopology) -> Result<(), AmqpError>;
+    async fn consumer(&self, queue: &'static str, tag: &'static str)
+        -> Result<Consumer, AmqpError>;
+    async fn install_topology(
+        &self,
+        topology: AmqpTopology,
+    ) -> Result<Vec<JoinHandle<()>>, AmqpError>;
 }
 
 pub struct Amqp {
@@ -139,32 +151,69 @@ impl IAmqp for Amqp {
             .map_err(|_| AmqpError::BindingExchangeToQueueError(exch.to_owned(), queue.to_owned()))
     }
 
-    async fn install_topology(&self, topology: AmqpTopology) -> Result<(), AmqpError> {
+    async fn consumer(
+        &self,
+        queue: &'static str,
+        tag: &'static str,
+    ) -> Result<Consumer, AmqpError> {
+        self.channel
+            .basic_consume(
+                queue,
+                tag,
+                BasicConsumeOptions {
+                    exclusive: false,
+                    no_ack: false,
+                    no_local: false,
+                    nowait: false,
+                },
+                FieldTable::default(),
+            )
+            .await
+            .map_err(|_| AmqpError::BindingConsumerError(tag.to_owned()))
+    }
+
+    async fn install_topology(
+        &self,
+        topology: AmqpTopology,
+    ) -> Result<Vec<JoinHandle<()>>, AmqpError> {
         for exch in topology.exchanges {
-            debug!("creating exchange: {}", exch.name);
-            self.channel
-                .exchange_declare(
-                    exch.name,
-                    ExchangeKind::Direct,
-                    ExchangeDeclareOptions {
-                        auto_delete: false,
-                        durable: true,
-                        internal: false,
-                        nowait: false,
-                        passive: false,
-                    },
-                    FieldTable::default(),
-                )
-                .await
-                .map_err(|_| AmqpError::DeclareExchangeError(exch.name.to_owned()))?;
-            debug!("exchange: {} was created", exch.name);
+            self.install_exchanges(&exch).await?;
         }
 
         for queue in topology.queues {
-            debug!("creating and binding queue: {}", queue.name);
             self.install_queues(&queue).await?;
-            debug!("queue: {} was created and bonded", queue.name);
         }
+
+        let mut consumers = vec![];
+        for consumer in topology.consumers {
+            consumers.push(self.install_consumers(consumer).await?);
+        }
+
+        Ok(consumers)
+    }
+}
+
+impl Amqp {
+    async fn install_exchanges<'i>(&self, exch: &'i ExchangeDefinition) -> Result<(), AmqpError> {
+        debug!("creating exchange: {}", exch.name);
+
+        self.channel
+            .exchange_declare(
+                exch.name,
+                ExchangeKind::Direct,
+                ExchangeDeclareOptions {
+                    auto_delete: false,
+                    durable: true,
+                    internal: false,
+                    nowait: false,
+                    passive: false,
+                },
+                FieldTable::default(),
+            )
+            .await
+            .map_err(|_| AmqpError::DeclareExchangeError(exch.name.to_owned()))?;
+
+        debug!("exchange: {} was created", exch.name);
 
         Ok(())
     }
@@ -172,6 +221,8 @@ impl IAmqp for Amqp {
 
 impl Amqp {
     async fn install_queues<'i>(&self, def: &'i QueueDefinition) -> Result<(), AmqpError> {
+        debug!("creating and binding queue: {}", def.name);
+
         let queue_map = self.install_retry(def).await?;
         let queue_map = self.install_dlq(def, queue_map).await?;
 
@@ -207,6 +258,8 @@ impl Amqp {
                     )
                 })?;
         }
+
+        debug!("queue: {} was created and bonded", def.name);
 
         Ok(())
     }
@@ -323,5 +376,57 @@ impl Amqp {
 
     fn _dlq_key(&self, queue: &str) -> String {
         format!("{}-dlq-key", queue)
+    }
+}
+
+impl Amqp {
+    pub async fn install_consumers(
+        &self,
+        def: ConsumerDefinition,
+    ) -> Result<JoinHandle<()>, AmqpError> {
+        let mut consumer = self
+            .channel
+            .basic_consume(
+                def.queue,
+                def.name,
+                BasicConsumeOptions {
+                    exclusive: false,
+                    no_ack: false,
+                    no_local: false,
+                    nowait: false,
+                },
+                FieldTable::default(),
+            )
+            .await
+            .map_err(|_| AmqpError::BindingConsumerError(def.name.to_owned()))?;
+
+        let span = tokio::spawn(async move {
+            while let Some(delivery) = consumer.next().await {
+                tokio::spawn(async move {
+                    if delivery.is_err() {
+                        error!("err");
+                        return;
+                    }
+                    let delivery = match delivery {
+                        Ok(d) => d,
+                        Err(error) => {
+                            error!("Failed to consume queue message {}", error);
+                            return;
+                        }
+                    };
+
+                    debug!("consumer received msg: {:?}", delivery.data);
+
+                    def.handler.unwrap().exec();
+
+                    delivery
+                        .ack(BasicAckOptions::default())
+                        .await
+                        .expect("Failed to ack send_webhook_event message");
+                });
+            }
+        });
+
+        Ok(span)
     }
 }

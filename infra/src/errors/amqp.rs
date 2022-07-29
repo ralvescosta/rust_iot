@@ -14,6 +14,9 @@ pub enum AmqpError {
     #[error("failure to declare a queue `{0}`")]
     DeclareQueueError(String),
 
-    #[error("failure to binding exchange `{0} to queue `{0}`")]
+    #[error("failure to binding exchange `{0}` to queue `{0}`")]
     BindingExchangeToQueueError(String, String),
+
+    #[error("failure to declare consumer `{0}`")]
+    BindingConsumerError(String),
 }
