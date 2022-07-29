@@ -181,7 +181,7 @@ impl IMQTT for MQTT {
             let metadata = metadata.unwrap();
 
             let tracer = global::tracer("handle_event");
-            let name = format!("mqtt::event::{}", metadata.kind);
+            let name = format!("mqtt::event::{:?}", metadata.kind);
             let name: &str = Box::leak(name.into_boxed_str());
 
             let mut span = tracer
@@ -324,13 +324,34 @@ mod tests {
 
     #[test]
     fn should_handle_event_err() {
-        let map = HashMap::default();
+        let mut mocked_controller = MockIController::new();
+
+        mocked_controller
+            .expect_exec()
+            .with(
+                eq(MessageMetadata {
+                    kind: MetadataKind::IoT(IoTServiceKind::Temp),
+                    topic: "iot/data/temp/device_id/location".to_owned(),
+                }),
+                eq(Message::Temp(TempMessage {
+                    temp: 39.9,
+                    time: 99999999,
+                })),
+            )
+            .times(1)
+            .returning(|_msg, _meta| Err(()));
+
+        let mut map: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>> = HashMap::default();
+        map.insert(
+            MetadataKind::IoT(IoTServiceKind::Temp),
+            Arc::new(mocked_controller),
+        );
 
         let mq = MQTT::mock(Config::mock(), map);
 
         let mut publish = Publish {
             dup: true,
-            payload: Bytes::try_from("").unwrap(),
+            payload: Bytes::new(),
             pkid: 10,
             qos: QoS::AtMostOnce,
             retain: false,
