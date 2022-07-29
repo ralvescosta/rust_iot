@@ -231,7 +231,7 @@ impl Amqp {
         );
         retry_map.insert(
             ShortString::from("x-message-ttl"),
-            AMQPValue::LongInt(LongInt::from(18000)),
+            AMQPValue::LongInt(LongInt::from(def.retry_ttl.unwrap())),
         );
 
         let name = self.retry_name(def.name);

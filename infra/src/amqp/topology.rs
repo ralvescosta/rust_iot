@@ -23,7 +23,7 @@ pub struct QueueDefinition {
     pub bindings: Vec<QueueBindingDefinition>,
     pub with_dlq: bool,
     pub with_retry: bool,
-    pub retry_ttl: Option<u32>,
+    pub retry_ttl: Option<i32>,
 }
 
 impl QueueDefinition {
@@ -39,9 +39,9 @@ impl QueueDefinition {
         self
     }
 
-    pub fn with_retry(mut self, ttl: u32) -> Self {
+    pub fn with_retry(mut self, milliseconds: i32) -> Self {
         self.with_retry = true;
-        self.retry_ttl = Some(ttl);
+        self.retry_ttl = Some(milliseconds);
         self
     }
 

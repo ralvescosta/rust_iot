@@ -1,16 +1,13 @@
+use crate::env::Config;
 use log::debug;
-
 use opentelemetry::sdk::{
     trace::{self, IdGenerator, Sampler},
     Resource,
 };
-
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::{Protocol, WithExportConfig};
 use std::{error::Error, time::Duration};
 use tonic::metadata::*;
-
-use crate::env::Config;
 
 pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
     debug!("telemetry :: starting telemetry setup...");

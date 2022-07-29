@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .queue(
             QueueDefinition::name("queue_top_test1")
                 .with_dlq()
-                .with_retry(500)
+                .with_retry(18000)
                 .binding(QueueBindingDefinition::new(
                     "exchange_top_test1",
                     "queue_top_test1",
