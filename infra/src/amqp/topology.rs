@@ -2,16 +2,16 @@ use crate::errors::AmqpError;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
-    pub queue: &'static str,
     pub exchange: &'static str,
+    pub queue: &'static str,
     pub routing_key: &'static str,
 }
 
 impl QueueBindingDefinition {
-    pub fn new(queue: &'static str, exchange: &'static str, routing_key: &'static str) -> Self {
+    pub fn new(exchange: &'static str, queue: &'static str, routing_key: &'static str) -> Self {
         QueueBindingDefinition {
-            queue,
             exchange,
+            queue,
             routing_key,
         }
     }
@@ -48,14 +48,6 @@ impl QueueDefinition {
     pub fn binding(mut self, bind: QueueBindingDefinition) -> Self {
         self.bindings.push(bind);
         self
-    }
-
-    fn dlq_name(&self) -> &'static str {
-        Box::leak(format!("{}-dlq", self.name).into_boxed_str())
-    }
-
-    fn dlq_key(&self) -> &'static str {
-        Box::leak(format!("{}-key-dlq", self.name).into_boxed_str())
     }
 }
 

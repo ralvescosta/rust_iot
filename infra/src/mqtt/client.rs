@@ -8,7 +8,6 @@ use opentelemetry::global;
 use opentelemetry::trace::{Span, SpanKind, StatusCode, Tracer};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 
-use std::borrow::Cow;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use super::types::{

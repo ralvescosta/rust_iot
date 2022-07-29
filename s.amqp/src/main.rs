@@ -3,24 +3,27 @@ use std::error::Error;
 // use futures_util::StreamExt;
 use infra::{
     amqp::client::Amqp,
-    amqp::topology::{
-        AmqpTopology, ConsumerDefinition, ExchangeDefinition, QueueBindingDefinition,
-        QueueDefinition,
-    },
+    amqp::topology::{AmqpTopology, ExchangeDefinition, QueueBindingDefinition, QueueDefinition},
     env::Config,
+    logging,
 };
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
+    logging::setup(&cfg)?;
 
     let topology = AmqpTopology::new()
-        .exchange(ExchangeDefinition::name("exch").direct())
+        .exchange(ExchangeDefinition::name("exchange_top_test1").direct())
         .queue(
-            QueueDefinition::name("queue")
+            QueueDefinition::name("queue_top_test1")
                 .with_dlq()
                 .with_retry(500)
-                .binding(QueueBindingDefinition::new("queue", "exchange", "key")),
+                .binding(QueueBindingDefinition::new(
+                    "exchange_top_test1",
+                    "queue_top_test1",
+                    "exchange_top_test1_queue_top_test1",
+                )),
         );
 
     let amqp = Amqp::new(&cfg).await?;
