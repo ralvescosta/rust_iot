@@ -19,10 +19,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let iot = IoTConsumer::new();
 
-    let consumer_def = ConsumerDefinition::name("name")
-        .queue("queue")
-        .handler(&iot);
-
     let topology = AmqpTopology::new()
         .exchange(ExchangeDefinition::name("exchange_top_test1").direct())
         .queue(
@@ -35,11 +31,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     "exchange_top_test1_queue_top_test1",
                 )),
         )
-        .consumer(consumer_def);
+        .consumer(
+            ConsumerDefinition::name("name")
+                .queue("queue_top_test1")
+                .handler(iot),
+        );
 
     let amqp = Amqp::new(&cfg).await?;
 
-    amqp.install_topology(topology).await?;
+    let tasks = amqp.install_topology(topology).await?;
+    for task in tasks {
+        tokio::join!(task);
+    }
 
     Ok(())
 }

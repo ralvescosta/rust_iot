@@ -1,18 +1,18 @@
 use super::topology::{
-    self, AmqpTopology, ConsumerDefinition, ExchangeDefinition, QueueDefinition,
+    AmqpTopology, ConsumerDefinition, ExchangeDefinition, Metadata, QueueDefinition,
 };
 use crate::{env::Config, errors::AmqpError};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use lapin::{
     options::{
-        BasicAckOptions, BasicConsumeOptions, ExchangeDeclareOptions, QueueBindOptions,
-        QueueDeclareOptions,
+        BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions,
+        ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
     },
     types::{AMQPValue, FieldTable, LongInt, LongString, ShortString},
-    Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
+    BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
 };
-use log::{debug, error};
+use log::{debug, error, warn};
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::task::JoinHandle;
 
@@ -186,7 +186,7 @@ impl IAmqp for Amqp {
 
         let mut consumers = vec![];
         for consumer in topology.consumers {
-            consumers.push(self.install_consumers(consumer).await?);
+            consumers.push(self.install_consumers(Box::new(consumer)).await?);
         }
 
         Ok(consumers)
@@ -382,7 +382,7 @@ impl Amqp {
 impl Amqp {
     pub async fn install_consumers(
         &self,
-        def: ConsumerDefinition,
+        def: Box<ConsumerDefinition>,
     ) -> Result<JoinHandle<()>, AmqpError> {
         let mut consumer = self
             .channel
@@ -400,13 +400,10 @@ impl Amqp {
             .await
             .map_err(|_| AmqpError::BindingConsumerError(def.name.to_owned()))?;
 
-        let span = tokio::spawn(async move {
-            while let Some(delivery) = consumer.next().await {
-                tokio::spawn(async move {
-                    if delivery.is_err() {
-                        error!("err");
-                        return;
-                    }
+        let span = tokio::spawn({
+            let this = Box::leak(Box::new(self));
+            async move {
+                while let Some(delivery) = consumer.next().await {
                     let delivery = match delivery {
                         Ok(d) => d,
                         Err(error) => {
@@ -415,15 +412,55 @@ impl Amqp {
                         }
                     };
 
-                    debug!("consumer received msg: {:?}", delivery.data);
+                    let header = match delivery.properties.headers() {
+                        Some(val) => val.to_owned(),
+                        None => FieldTable::default(),
+                    };
 
-                    def.handler.unwrap().exec();
+                    let metadata = Metadata::extract(&header);
 
-                    delivery
-                        .ack(BasicAckOptions::default())
-                        .await
-                        .expect("Failed to ack send_webhook_event message");
-                });
+                    match def.handler.exec() {
+                        Ok(_) => match delivery.ack(BasicAckOptions { multiple: true }).await {
+                            Ok(_) => {}
+                            _ => error!("error whiling ack msg"),
+                        },
+                        _ if def.with_retry => {
+                            warn!("error whiling handling msg, requeuing for latter");
+                            if metadata.count < def.retries {
+                                match delivery
+                                    .nack(BasicNackOptions {
+                                        multiple: true,
+                                        requeue: false,
+                                    })
+                                    .await
+                                {
+                                    Ok(_) => {}
+                                    _ => error!("error whiling requeuing"),
+                                }
+                            } else {
+                                this.channel.basic_publish(
+                                    "",
+                                    "",
+                                    BasicPublishOptions::default(),
+                                    &delivery.data,
+                                    BasicProperties::default(),
+                                );
+                            }
+                        }
+                        _ => {
+                            match delivery
+                                .nack(BasicNackOptions {
+                                    multiple: true,
+                                    requeue: false,
+                                })
+                                .await
+                            {
+                                Ok(_) => {}
+                                _ => error!("error whiling nack msg"),
+                            }
+                        }
+                    }
+                }
             }
         });
 

@@ -1,6 +1,6 @@
-use std::sync::Arc;
-
 use crate::errors::AmqpError;
+use lapin::types::FieldTable;
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
@@ -104,7 +104,18 @@ pub trait ConsumerHandler {
 pub struct ConsumerDefinition {
     pub name: &'static str,
     pub queue: &'static str,
-    pub handler: Option<&'static Arc<dyn ConsumerHandler + Send + Sync>>,
+    pub with_retry: bool,
+    pub retries: i64,
+    pub with_dlq: bool,
+    pub handler: Arc<dyn ConsumerHandler + Send + Sync>,
+}
+
+pub struct DummyConsumerHandler;
+
+impl ConsumerHandler for DummyConsumerHandler {
+    fn exec(&self) -> Result<(), AmqpError> {
+        todo!()
+    }
 }
 
 impl ConsumerDefinition {
@@ -112,7 +123,10 @@ impl ConsumerDefinition {
         ConsumerDefinition {
             name,
             queue: "",
-            handler: None,
+            retries: 1,
+            with_dlq: false,
+            with_retry: false,
+            handler: Arc::new(DummyConsumerHandler {}),
         }
     }
 
@@ -121,8 +135,19 @@ impl ConsumerDefinition {
         self
     }
 
-    pub fn handler(mut self, handler: &'static Arc<dyn ConsumerHandler + Send + Sync>) -> Self {
-        self.handler = Some(handler);
+    pub fn handler(mut self, handler: Arc<dyn ConsumerHandler + Send + Sync>) -> Self {
+        self.handler = handler;
+        self
+    }
+
+    pub fn with_dlq(mut self) -> Self {
+        self.with_dlq = true;
+        self
+    }
+
+    pub fn with_retry(mut self, retries: i64) -> Self {
+        self.with_retry = true;
+        self.retries = retries;
         self
     }
 }
@@ -159,5 +184,45 @@ impl AmqpTopology {
 
     pub fn build(self) -> Self {
         self
+    }
+}
+
+#[derive(Debug)]
+pub struct Metadata {
+    pub count: i64,
+    pub traceparent: String,
+}
+
+impl Metadata {
+    pub fn extract(header: &FieldTable) -> Metadata {
+        let count = match header.inner().get("x-death") {
+            Some(value) => match value.as_array() {
+                Some(arr) => match arr.as_slice().get(0) {
+                    Some(value) => match value.as_field_table() {
+                        Some(table) => match table.inner().get("count") {
+                            Some(value) => match value.as_long_long_int() {
+                                Some(long) => long,
+                                _ => 0,
+                            },
+                            _ => 0,
+                        },
+                        _ => 0,
+                    },
+                    _ => 0,
+                },
+                _ => 0,
+            },
+            _ => 0,
+        };
+
+        let traceparent = match header.inner().get("traceparent") {
+            Some(value) => match value.as_long_string() {
+                Some(st) => st.to_string(),
+                _ => "".to_owned(),
+            },
+            _ => "".to_owned(),
+        };
+
+        Metadata { count, traceparent }
     }
 }
