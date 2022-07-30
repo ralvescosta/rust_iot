@@ -1,6 +1,4 @@
 use crate::errors::AmqpError;
-use lapin::types::FieldTable;
-use std::{rc::Rc, sync::Arc};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
@@ -26,6 +24,7 @@ pub struct QueueDefinition {
     pub with_dlq: bool,
     pub with_retry: bool,
     pub retry_ttl: Option<i32>,
+    pub retries: Option<i64>,
 }
 
 impl QueueDefinition {
@@ -41,8 +40,9 @@ impl QueueDefinition {
         self
     }
 
-    pub fn with_retry(mut self, milliseconds: i32) -> Self {
+    pub fn with_retry(mut self, milliseconds: i32, retries: i64) -> Self {
         self.with_retry = true;
+        self.retries = Some(retries);
         self.retry_ttl = Some(milliseconds);
         self
     }
@@ -167,58 +167,22 @@ impl AmqpTopology {
         Box::new(self)
     }
 
-    pub fn get_consumers_def(&self) -> Vec<ConsumerDefinition> {
-        let mut defs = vec![];
+    pub fn get_consumers_def(&self, queue_name: &str) -> Option<ConsumerDefinition> {
         for queue in self.queues.clone() {
-            defs.push(ConsumerDefinition {
-                name: queue.name,
-                queue: queue.name,
-                retries: 3,
-                with_dlq: queue.with_dlq,
-                with_retry: queue.with_retry,
-            })
-        }
-
-        defs
-    }
-}
-
-#[derive(Debug)]
-pub struct Metadata {
-    pub count: i64,
-    pub traceparent: String,
-}
-
-impl Metadata {
-    pub fn extract(header: &FieldTable) -> Metadata {
-        let count = match header.inner().get("x-death") {
-            Some(value) => match value.as_array() {
-                Some(arr) => match arr.as_slice().get(0) {
-                    Some(value) => match value.as_field_table() {
-                        Some(table) => match table.inner().get("count") {
-                            Some(value) => match value.as_long_long_int() {
-                                Some(long) => long,
-                                _ => 0,
-                            },
-                            _ => 0,
-                        },
-                        _ => 0,
-                    },
+            if queue.name == queue_name {
+                let retries = match queue.retries {
+                    Some(r) => r,
                     _ => 0,
-                },
-                _ => 0,
-            },
-            _ => 0,
-        };
-
-        let traceparent = match header.inner().get("traceparent") {
-            Some(value) => match value.as_long_string() {
-                Some(st) => st.to_string(),
-                _ => "".to_owned(),
-            },
-            _ => "".to_owned(),
-        };
-
-        Metadata { count, traceparent }
+                };
+                return Some(ConsumerDefinition {
+                    name: queue.name,
+                    queue: queue.name,
+                    retries,
+                    with_dlq: queue.with_dlq,
+                    with_retry: queue.with_retry,
+                });
+            }
+        }
+        None
     }
 }
