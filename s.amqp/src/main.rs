@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
             async move {
                 while let Some(delivery) = consumer.next().await {
-                    cloned.custom_handler(def, handler.clone(), delivery);
+                    cloned.consume(def, handler.clone(), delivery);
                 }
             }
         });

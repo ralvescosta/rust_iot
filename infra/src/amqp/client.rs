@@ -44,7 +44,7 @@ pub trait IAmqp {
     ) -> Result<(), AmqpError>;
     async fn consumer(&self, queue: &str, tag: &str) -> Result<Consumer, AmqpError>;
     async fn install_topology(&self, topology: &AmqpTopology) -> Result<(), AmqpError>;
-    async fn custom_handler(
+    async fn consume(
         &self,
         def: ConsumerDefinition,
         handler: Arc<dyn ConsumerHandler + Send + Sync>,
@@ -184,7 +184,7 @@ impl IAmqp for Amqp {
         Ok(())
     }
 
-    async fn custom_handler(
+    async fn consume(
         &self,
         def: ConsumerDefinition,
         handler: Arc<dyn ConsumerHandler + Send + Sync>,
