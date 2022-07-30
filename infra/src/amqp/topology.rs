@@ -22,6 +22,7 @@ pub struct QueueDefinition {
     pub name: &'static str,
     pub bindings: Vec<QueueBindingDefinition>,
     pub with_dlq: bool,
+    pub dlq_name: &'static str,
     pub with_retry: bool,
     pub retry_ttl: Option<i32>,
     pub retries: Option<i64>,
@@ -37,6 +38,7 @@ impl QueueDefinition {
 
     pub fn with_dlq(mut self) -> Self {
         self.with_dlq = true;
+        self.dlq_name = Box::leak(Box::new(self.dlq_name()));
         self
     }
 
@@ -50,6 +52,10 @@ impl QueueDefinition {
     pub fn binding(mut self, bind: QueueBindingDefinition) -> Self {
         self.bindings.push(bind);
         self
+    }
+
+    fn dlq_name(&self) -> String {
+        format!("{}-dlq", self.name)
     }
 }
 
@@ -108,6 +114,7 @@ pub struct ConsumerDefinition {
     pub with_retry: bool,
     pub retries: i64,
     pub with_dlq: bool,
+    pub dlq_name: &'static str,
 }
 
 impl ConsumerDefinition {
@@ -116,8 +123,9 @@ impl ConsumerDefinition {
             name,
             queue: "",
             retries: 1,
-            with_dlq: false,
             with_retry: false,
+            with_dlq: false,
+            dlq_name: "",
         }
     }
 
@@ -179,6 +187,7 @@ impl AmqpTopology {
                     queue: queue.name,
                     retries,
                     with_dlq: queue.with_dlq,
+                    dlq_name: queue.dlq_name,
                     with_retry: queue.with_retry,
                 });
             }

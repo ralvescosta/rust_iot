@@ -272,7 +272,7 @@ impl IAmqp for Amqp {
                         .channel
                         .basic_publish(
                             "",
-                            "",
+                            def.dlq_name,
                             BasicPublishOptions::default(),
                             &delivery.data,
                             BasicProperties::default(),
