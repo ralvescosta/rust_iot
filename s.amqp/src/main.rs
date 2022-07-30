@@ -1,6 +1,7 @@
+use futures_util::StreamExt;
 use std::error::Error;
-
-// use futures_util::StreamExt;
+mod consumers;
+use consumers::iot::IoTConsumer;
 use infra::{
     amqp::client::Amqp,
     amqp::topology::{AmqpTopology, ExchangeDefinition, QueueBindingDefinition, QueueDefinition},
@@ -24,11 +25,30 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     "queue_top_test1",
                     "exchange_top_test1_queue_top_test1",
                 )),
-        );
+        )
+        .arc();
 
     let amqp = Amqp::new(&cfg).await?;
+    amqp.clone().install_topology(&topology).await?;
+    let consumers_def = topology.get_consumers_def();
 
-    amqp.install_topology(topology).await?;
+    for def in consumers_def {
+        let mut consumer = amqp.consumer(def.queue, def.queue).await?;
+
+        tokio::spawn({
+            let cloned = amqp.clone();
+            let handler = IoTConsumer::new();
+
+            async move {
+                while let Some(delivery) = consumer.next().await {
+                    cloned.consume(def, handler.clone(), delivery);
+                }
+            }
+        });
+    }
+    // for task in tasks {
+    //     tokio::join!(task);
+    // }
 
     Ok(())
 }

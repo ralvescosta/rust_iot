@@ -1,4 +1,6 @@
 use crate::errors::AmqpError;
+use lapin::types::FieldTable;
+use std::{rc::Rc, sync::Arc};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
@@ -99,10 +101,13 @@ pub trait ConsumerHandler {
     fn exec(&self) -> Result<(), AmqpError>;
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct ConsumerDefinition {
     pub name: &'static str,
     pub queue: &'static str,
-    pub handler: Option<Box<dyn ConsumerHandler + Send + Sync>>,
+    pub with_retry: bool,
+    pub retries: i64,
+    pub with_dlq: bool,
 }
 
 impl ConsumerDefinition {
@@ -110,7 +115,9 @@ impl ConsumerDefinition {
         ConsumerDefinition {
             name,
             queue: "",
-            handler: None,
+            retries: 1,
+            with_dlq: false,
+            with_retry: false,
         }
     }
 
@@ -119,8 +126,14 @@ impl ConsumerDefinition {
         self
     }
 
-    pub fn handler(mut self, handler: Box<dyn ConsumerHandler + Send + Sync>) -> Self {
-        self.handler = Some(handler);
+    pub fn with_dlq(mut self) -> Self {
+        self.with_dlq = true;
+        self
+    }
+
+    pub fn with_retry(mut self, retries: i64) -> Self {
+        self.with_retry = true;
+        self.retries = retries;
         self
     }
 }
@@ -150,12 +163,62 @@ impl AmqpTopology {
         self
     }
 
-    pub fn consumer(mut self, consumer: ConsumerDefinition) -> Self {
-        self.consumers.push(consumer);
-        self
+    pub fn arc(self) -> Box<Self> {
+        Box::new(self)
     }
 
-    pub fn build(self) -> Self {
-        self
+    pub fn get_consumers_def(&self) -> Vec<ConsumerDefinition> {
+        let mut defs = vec![];
+        for queue in self.queues.clone() {
+            defs.push(ConsumerDefinition {
+                name: queue.name,
+                queue: queue.name,
+                retries: 3,
+                with_dlq: queue.with_dlq,
+                with_retry: queue.with_retry,
+            })
+        }
+
+        defs
+    }
+}
+
+#[derive(Debug)]
+pub struct Metadata {
+    pub count: i64,
+    pub traceparent: String,
+}
+
+impl Metadata {
+    pub fn extract(header: &FieldTable) -> Metadata {
+        let count = match header.inner().get("x-death") {
+            Some(value) => match value.as_array() {
+                Some(arr) => match arr.as_slice().get(0) {
+                    Some(value) => match value.as_field_table() {
+                        Some(table) => match table.inner().get("count") {
+                            Some(value) => match value.as_long_long_int() {
+                                Some(long) => long,
+                                _ => 0,
+                            },
+                            _ => 0,
+                        },
+                        _ => 0,
+                    },
+                    _ => 0,
+                },
+                _ => 0,
+            },
+            _ => 0,
+        };
+
+        let traceparent = match header.inner().get("traceparent") {
+            Some(value) => match value.as_long_string() {
+                Some(st) => st.to_string(),
+                _ => "".to_owned(),
+            },
+            _ => "".to_owned(),
+        };
+
+        Metadata { count, traceparent }
     }
 }
