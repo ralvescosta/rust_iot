@@ -1,10 +1,12 @@
 use crate::env::Config;
 use log::debug;
-use opentelemetry::sdk::{
-    trace::{self, IdGenerator, Sampler},
-    Resource,
+use opentelemetry::{
+    sdk::{
+        trace::{self, IdGenerator, Sampler},
+        Resource,
+    },
+    KeyValue,
 };
-use opentelemetry::KeyValue;
 use opentelemetry_otlp::{Protocol, WithExportConfig};
 use std::{error::Error, time::Duration};
 use tonic::metadata::*;

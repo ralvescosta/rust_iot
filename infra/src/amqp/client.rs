@@ -1,8 +1,10 @@
-use super::topology::{
-    AmqpTopology, ConsumerDefinition, ConsumerHandler, ExchangeDefinition, QueueDefinition,
+use super::{
+    topology::{
+        AmqpTopology, ConsumerDefinition, ConsumerHandler, ExchangeDefinition, QueueDefinition,
+    },
+    types::{Metadata, PublishData},
 };
-use super::types::{Metadata, PublishData};
-use crate::{env::Config, errors::AmqpError};
+use crate::{env::Config, errors::AmqpError, otel};
 use async_trait::async_trait;
 use lapin::{
     message::Delivery,
@@ -15,6 +17,10 @@ use lapin::{
     BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
 };
 use log::{debug, error, warn};
+use opentelemetry::{
+    global,
+    trace::{Span, StatusCode},
+};
 use std::{collections::BTreeMap, sync::Arc};
 use uuid::Uuid;
 
@@ -232,10 +238,18 @@ impl IAmqp for Amqp {
 
         let metadata = Metadata::extract(&header);
 
+        let tracer = global::tracer("handle_event");
+        let mut span = otel::amqp::get_span(def.queue, metadata.traceparent, &tracer);
+
         match handler.exec() {
             Ok(_) => match delivery.ack(BasicAckOptions { multiple: true }).await {
-                Ok(_) => {}
-                _ => error!("error whiling ack msg"),
+                Ok(_) => {
+                    span.set_status(StatusCode::Ok, "success".to_owned());
+                }
+                _ => {
+                    error!("error whiling ack msg");
+                    span.set_status(StatusCode::Error, "error to ack msg".to_owned());
+                }
             },
             _ if def.with_retry => {
                 warn!("error whiling handling msg, requeuing for latter");
@@ -248,7 +262,10 @@ impl IAmqp for Amqp {
                         .await
                     {
                         Ok(_) => {}
-                        _ => error!("error whiling requeuing"),
+                        _ => {
+                            error!("error whiling requeuing");
+                            span.set_status(StatusCode::Error, "error to requeuing msg".to_owned());
+                        }
                     }
                 } else {
                     match self
@@ -263,7 +280,13 @@ impl IAmqp for Amqp {
                         .await
                     {
                         Ok(_) => {}
-                        _ => error!("error whiling sending to dlq"),
+                        _ => {
+                            error!("error whiling sending to dlq");
+                            span.set_status(
+                                StatusCode::Error,
+                                "error to sending to dlq".to_owned(),
+                            );
+                        }
                     };
                 }
             }
@@ -276,11 +299,13 @@ impl IAmqp for Amqp {
                     .await
                 {
                     Ok(_) => {}
-                    _ => error!("error whiling nack msg"),
+                    _ => {
+                        error!("error whiling nack msg");
+                        span.set_status(StatusCode::Error, "error to nack msg".to_owned());
+                    }
                 }
             }
         }
-        // }
 
         Ok(())
     }

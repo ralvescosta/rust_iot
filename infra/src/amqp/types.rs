@@ -1,7 +1,7 @@
+use crate::{errors::AmqpError, otel};
 use lapin::types::FieldTable;
+use opentelemetry::global::BoxedSpan;
 use serde::Serialize;
-
-use crate::errors::AmqpError;
 
 #[derive(Debug)]
 pub struct Metadata {
@@ -51,22 +51,28 @@ pub trait PublishPayload {
 pub struct PublishData {
     pub payload: Box<[u8]>,
     pub msg_type: String,
+    ///traceparent is compos from {trace-version}-{trace-id}-{parent-id}-{trace-flags}
     pub traceparent: String,
 }
 
 impl PublishData {
-    pub fn new<T>(d: T, span: String) -> Result<Self, AmqpError>
+    pub fn new<T>(payload: T, span: Option<&BoxedSpan>) -> Result<Self, AmqpError>
     where
         T: PublishPayload + Serialize,
     {
-        let payload = serde_json::to_vec::<T>(&d)
+        let boxed = serde_json::to_vec::<T>(&payload)
             .map_err(|_| AmqpError::ParsePayloadError {})?
             .into_boxed_slice();
 
+        let traceparent = match span {
+            Some(s) => otel::amqp::traceparent(s),
+            _ => String::new(),
+        };
+
         Ok(PublishData {
-            msg_type: d.get_type(),
-            payload,
-            traceparent: span,
+            msg_type: payload.get_type(),
+            payload: boxed,
+            traceparent,
         })
     }
 }

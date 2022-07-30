@@ -1,18 +1,20 @@
-use futures_util::StreamExt;
-use std::error::Error;
 mod consumers;
+
 use consumers::iot::IoTConsumer;
+use futures_util::StreamExt;
 use infra::{
     amqp::client::Amqp,
     amqp::topology::{AmqpTopology, ExchangeDefinition, QueueBindingDefinition, QueueDefinition},
     env::Config,
-    logging,
+    logging, otel,
 };
+use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
     logging::setup(&cfg)?;
+    otel::tracing::setup(&cfg)?;
     let amqp = Amqp::new(&cfg).await?;
 
     let topology = AmqpTopology::new()

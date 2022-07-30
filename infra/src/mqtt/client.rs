@@ -1,15 +1,16 @@
 use super::types::{
     IController, IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage,
 };
-use crate::env::Config;
-use crate::errors::MqttError;
+use crate::{env::Config, errors::MqttError};
 use async_trait::async_trait;
 use bytes::Bytes;
 use log::{debug, error};
 #[cfg(test)]
 use mockall::predicate::*;
-use opentelemetry::global;
-use opentelemetry::trace::{Span, SpanKind, StatusCode, Tracer};
+use opentelemetry::{
+    global,
+    trace::{Span, SpanKind, StatusCode, Tracer},
+};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
