@@ -1,6 +1,6 @@
 use crate::errors::AmqpError;
 use lapin::types::FieldTable;
-use std::sync::Arc;
+use std::{rc::Rc, sync::Arc};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
@@ -101,21 +101,13 @@ pub trait ConsumerHandler {
     fn exec(&self) -> Result<(), AmqpError>;
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct ConsumerDefinition {
     pub name: &'static str,
     pub queue: &'static str,
     pub with_retry: bool,
     pub retries: i64,
     pub with_dlq: bool,
-    pub handler: Arc<dyn ConsumerHandler + Send + Sync>,
-}
-
-pub struct DummyConsumerHandler;
-
-impl ConsumerHandler for DummyConsumerHandler {
-    fn exec(&self) -> Result<(), AmqpError> {
-        todo!()
-    }
 }
 
 impl ConsumerDefinition {
@@ -126,17 +118,11 @@ impl ConsumerDefinition {
             retries: 1,
             with_dlq: false,
             with_retry: false,
-            handler: Arc::new(DummyConsumerHandler {}),
         }
     }
 
     pub fn queue(mut self, queue: &'static str) -> Self {
         self.queue = queue;
-        self
-    }
-
-    pub fn handler(mut self, handler: Arc<dyn ConsumerHandler + Send + Sync>) -> Self {
-        self.handler = handler;
         self
     }
 
@@ -177,13 +163,23 @@ impl AmqpTopology {
         self
     }
 
-    pub fn consumer(mut self, consumer: ConsumerDefinition) -> Self {
-        self.consumers.push(consumer);
-        self
+    pub fn arc(self) -> Box<Self> {
+        Box::new(self)
     }
 
-    pub fn build(self) -> Self {
-        self
+    pub fn get_consumers_def(&self) -> Vec<ConsumerDefinition> {
+        let mut defs = vec![];
+        for queue in self.queues.clone() {
+            defs.push(ConsumerDefinition {
+                name: queue.name,
+                queue: queue.name,
+                retries: 3,
+                with_dlq: queue.with_dlq,
+                with_retry: queue.with_retry,
+            })
+        }
+
+        defs
     }
 }
 

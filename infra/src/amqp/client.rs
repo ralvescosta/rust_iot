@@ -1,25 +1,27 @@
 use super::topology::{
-    AmqpTopology, ConsumerDefinition, ExchangeDefinition, Metadata, QueueDefinition,
+    AmqpTopology, ConsumerDefinition, ConsumerHandler, ExchangeDefinition, Metadata,
+    QueueDefinition,
 };
 use crate::{env::Config, errors::AmqpError};
 use async_trait::async_trait;
-use futures_util::StreamExt;
+
 use lapin::{
+    message::Delivery,
     options::{
         BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions,
         ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
     },
     types::{AMQPValue, FieldTable, LongInt, LongString, ShortString},
-    BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
+    BasicProperties, Channel, Connection, ConnectionProperties, Consumer, Error, ExchangeKind,
+    Queue,
 };
 use log::{debug, error, warn};
 use std::{collections::BTreeMap, sync::Arc};
-use tokio::task::JoinHandle;
 
 #[async_trait]
 pub trait IAmqp {
-    fn channel(&'static self) -> &'static Channel;
-    fn connection(&'static self) -> &'static Connection;
+    fn channel(&self) -> &Channel;
+    fn connection(&self) -> &Connection;
     async fn declare_queue(
         &self,
         name: &str,
@@ -40,12 +42,14 @@ pub trait IAmqp {
         queue: &str,
         key: &str,
     ) -> Result<(), AmqpError>;
-    async fn consumer(&self, queue: &'static str, tag: &'static str)
-        -> Result<Consumer, AmqpError>;
-    async fn install_topology(
+    async fn consumer(&self, queue: &str, tag: &str) -> Result<Consumer, AmqpError>;
+    async fn install_topology(&self, topology: &AmqpTopology) -> Result<(), AmqpError>;
+    async fn custom_handler(
         &self,
-        topology: AmqpTopology,
-    ) -> Result<Vec<JoinHandle<()>>, AmqpError>;
+        def: ConsumerDefinition,
+        handler: Arc<dyn ConsumerHandler + Send + Sync>,
+        delivery: Result<Delivery, Error>,
+    ) -> Result<(), AmqpError>;
 }
 
 pub struct Amqp {
@@ -54,7 +58,7 @@ pub struct Amqp {
 }
 
 impl Amqp {
-    pub async fn new(cfg: &Config) -> Result<Arc<dyn IAmqp + Send + Sync>, AmqpError> {
+    pub async fn new<'n>(cfg: &Config) -> Result<Arc<dyn IAmqp + Send + Sync>, AmqpError> {
         debug!("creating amqp connection...");
         let options =
             ConnectionProperties::default().with_connection_name(LongString::from(cfg.app_name));
@@ -78,11 +82,11 @@ impl Amqp {
 
 #[async_trait]
 impl IAmqp for Amqp {
-    fn channel(&'static self) -> &'static Channel {
+    fn channel(&self) -> &Channel {
         &self.channel
     }
 
-    fn connection(&'static self) -> &'static Connection {
+    fn connection(&self) -> &Connection {
         &self.conn
     }
 
@@ -151,11 +155,7 @@ impl IAmqp for Amqp {
             .map_err(|_| AmqpError::BindingExchangeToQueueError(exch.to_owned(), queue.to_owned()))
     }
 
-    async fn consumer(
-        &self,
-        queue: &'static str,
-        tag: &'static str,
-    ) -> Result<Consumer, AmqpError> {
+    async fn consumer(&self, queue: &str, tag: &str) -> Result<Consumer, AmqpError> {
         self.channel
             .basic_consume(
                 queue,
@@ -172,24 +172,91 @@ impl IAmqp for Amqp {
             .map_err(|_| AmqpError::BindingConsumerError(tag.to_owned()))
     }
 
-    async fn install_topology(
-        &self,
-        topology: AmqpTopology,
-    ) -> Result<Vec<JoinHandle<()>>, AmqpError> {
-        for exch in topology.exchanges {
+    async fn install_topology(&self, topology: &AmqpTopology) -> Result<(), AmqpError> {
+        for exch in topology.exchanges.clone() {
             self.install_exchanges(&exch).await?;
         }
 
-        for queue in topology.queues {
+        for queue in topology.queues.clone() {
             self.install_queues(&queue).await?;
         }
 
-        let mut consumers = vec![];
-        for consumer in topology.consumers {
-            consumers.push(self.install_consumers(Box::new(consumer)).await?);
-        }
+        Ok(())
+    }
 
-        Ok(consumers)
+    async fn custom_handler(
+        &self,
+        def: ConsumerDefinition,
+        handler: Arc<dyn ConsumerHandler + Send + Sync>,
+        delivery: Result<Delivery, Error>,
+    ) -> Result<(), AmqpError> {
+        // while let Some(delivery) = consumer.next().await {
+        let delivery = match delivery {
+            Ok(d) => d,
+            Err(error) => {
+                error!("Failed to consume queue message {}", error);
+                return Ok(());
+            }
+        };
+
+        let header = match delivery.properties.headers() {
+            Some(val) => val.to_owned(),
+            None => FieldTable::default(),
+        };
+
+        let metadata = Metadata::extract(&header);
+
+        match handler.exec() {
+            Ok(_) => match delivery.ack(BasicAckOptions { multiple: true }).await {
+                Ok(_) => {}
+                _ => error!("error whiling ack msg"),
+            },
+            _ if def.with_retry => {
+                warn!("error whiling handling msg, requeuing for latter");
+                if metadata.count < def.retries {
+                    match delivery
+                        .nack(BasicNackOptions {
+                            multiple: true,
+                            requeue: false,
+                        })
+                        .await
+                    {
+                        Ok(_) => {}
+                        _ => error!("error whiling requeuing"),
+                    }
+                } else {
+                    match self
+                        .channel
+                        .basic_publish(
+                            "",
+                            "",
+                            BasicPublishOptions::default(),
+                            &delivery.data,
+                            BasicProperties::default(),
+                        )
+                        .await
+                    {
+                        Ok(_) => {}
+                        _ => error!("error whiling sending to dlq"),
+                    };
+                }
+            }
+            _ => {
+                match delivery
+                    .nack(BasicNackOptions {
+                        multiple: true,
+                        requeue: false,
+                    })
+                    .await
+                {
+                    Ok(_) => {}
+                    _ => error!("error whiling nack msg"),
+                }
+            }
+        }
+        // }
+
+        Ok(())
     }
 }
 
@@ -379,91 +446,6 @@ impl Amqp {
     }
 }
 
-impl Amqp {
-    pub async fn install_consumers(
-        &self,
-        def: Box<ConsumerDefinition>,
-    ) -> Result<JoinHandle<()>, AmqpError> {
-        let mut consumer = self
-            .channel
-            .basic_consume(
-                def.queue,
-                def.name,
-                BasicConsumeOptions {
-                    exclusive: false,
-                    no_ack: false,
-                    no_local: false,
-                    nowait: false,
-                },
-                FieldTable::default(),
-            )
-            .await
-            .map_err(|_| AmqpError::BindingConsumerError(def.name.to_owned()))?;
+// impl IAmqp for Amqp {
 
-        let span = tokio::spawn({
-            let this = Box::leak(Box::new(self));
-            async move {
-                while let Some(delivery) = consumer.next().await {
-                    let delivery = match delivery {
-                        Ok(d) => d,
-                        Err(error) => {
-                            error!("Failed to consume queue message {}", error);
-                            return;
-                        }
-                    };
-
-                    let header = match delivery.properties.headers() {
-                        Some(val) => val.to_owned(),
-                        None => FieldTable::default(),
-                    };
-
-                    let metadata = Metadata::extract(&header);
-
-                    match def.handler.exec() {
-                        Ok(_) => match delivery.ack(BasicAckOptions { multiple: true }).await {
-                            Ok(_) => {}
-                            _ => error!("error whiling ack msg"),
-                        },
-                        _ if def.with_retry => {
-                            warn!("error whiling handling msg, requeuing for latter");
-                            if metadata.count < def.retries {
-                                match delivery
-                                    .nack(BasicNackOptions {
-                                        multiple: true,
-                                        requeue: false,
-                                    })
-                                    .await
-                                {
-                                    Ok(_) => {}
-                                    _ => error!("error whiling requeuing"),
-                                }
-                            } else {
-                                this.channel.basic_publish(
-                                    "",
-                                    "",
-                                    BasicPublishOptions::default(),
-                                    &delivery.data,
-                                    BasicProperties::default(),
-                                );
-                            }
-                        }
-                        _ => {
-                            match delivery
-                                .nack(BasicNackOptions {
-                                    multiple: true,
-                                    requeue: false,
-                                })
-                                .await
-                            {
-                                Ok(_) => {}
-                                _ => error!("error whiling nack msg"),
-                            }
-                        }
-                    }
-                }
-            }
-        });
-
-        Ok(span)
-    }
-}
+// }

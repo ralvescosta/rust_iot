@@ -1,13 +1,10 @@
+use futures_util::StreamExt;
 use std::error::Error;
-
 mod consumers;
 use consumers::iot::IoTConsumer;
 use infra::{
     amqp::client::Amqp,
-    amqp::topology::{
-        AmqpTopology, ConsumerDefinition, ExchangeDefinition, QueueBindingDefinition,
-        QueueDefinition,
-    },
+    amqp::topology::{AmqpTopology, ExchangeDefinition, QueueBindingDefinition, QueueDefinition},
     env::Config,
     logging,
 };
@@ -16,8 +13,6 @@ use infra::{
 async fn main() -> Result<(), Box<dyn Error>> {
     let cfg = Config::new();
     logging::setup(&cfg)?;
-
-    let iot = IoTConsumer::new();
 
     let topology = AmqpTopology::new()
         .exchange(ExchangeDefinition::name("exchange_top_test1").direct())
@@ -31,18 +26,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     "exchange_top_test1_queue_top_test1",
                 )),
         )
-        .consumer(
-            ConsumerDefinition::name("name")
-                .queue("queue_top_test1")
-                .handler(iot),
-        );
+        .arc();
 
     let amqp = Amqp::new(&cfg).await?;
+    amqp.clone().install_topology(&topology).await?;
+    let consumers_def = topology.get_consumers_def();
 
-    let tasks = amqp.install_topology(topology).await?;
-    for task in tasks {
-        tokio::join!(task);
+    for def in consumers_def {
+        let mut consumer = amqp.consumer(def.queue, def.queue).await?;
+
+        tokio::spawn({
+            let cloned = amqp.clone();
+            let handler = IoTConsumer::new();
+
+            async move {
+                while let Some(delivery) = consumer.next().await {
+                    cloned.custom_handler(def, handler.clone(), delivery);
+                }
+            }
+        });
     }
+    // for task in tasks {
+    //     tokio::join!(task);
+    // }
 
     Ok(())
 }
