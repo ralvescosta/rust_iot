@@ -1,4 +1,5 @@
 use crate::errors::AmqpError;
+use async_trait::async_trait;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
@@ -103,8 +104,9 @@ impl ExchangeDefinition {
     }
 }
 
+#[async_trait]
 pub trait ConsumerHandler {
-    fn exec(&self) -> Result<(), AmqpError>;
+    async fn exec(&self) -> Result<(), AmqpError>;
 }
 
 #[derive(Debug, Clone, Copy)]

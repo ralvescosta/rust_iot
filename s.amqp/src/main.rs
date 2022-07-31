@@ -12,7 +12,8 @@ use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let cfg = Config::new();
+    let mut cfg = Config::new();
+    cfg.app_name = "amqp";
     logging::setup(&cfg)?;
     otel::tracing::setup(&cfg)?;
     let amqp = Amqp::new(&cfg).await?;

@@ -1,15 +1,18 @@
 use crate::env::Config;
 use log::debug;
 use opentelemetry::{
+    global::{self, BoxedSpan},
     sdk::{
         trace::{self, IdGenerator, Sampler},
         Resource,
     },
-    KeyValue,
+    trace::{Span, SpanKind, TraceContextExt, Tracer},
+    Context, KeyValue,
 };
 use opentelemetry_otlp::{Protocol, WithExportConfig};
 use std::{error::Error, time::Duration};
 use tonic::metadata::*;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
     debug!("telemetry :: starting telemetry setup...");
@@ -65,4 +68,29 @@ pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
     // debug!("telemetry :: metrics installed");
 
     Ok(())
+}
+
+pub fn new_span(trace_name: &'static str, span_name: &'static str) -> (Context, BoxedSpan) {
+    let tracer = global::tracer(trace_name);
+
+    let span = tracer
+        .span_builder(span_name)
+        .with_kind(SpanKind::Consumer)
+        .start(&tracer);
+
+    let span_ctx = span.span_context();
+    let trace_id = span_ctx.trace_id();
+    let span_id = span_ctx.span_id();
+    let flags = span_ctx.trace_flags();
+
+    let ctx = Context::current_with_span(span);
+    let ctx = ctx.with_value(trace_id);
+    let ctx = ctx.with_value(span_id);
+
+    tracing::Span::current().set_parent(ctx.clone());
+
+    (
+        ctx.with_value(flags),
+        tracer.start_with_context(span_name, &ctx),
+    )
 }

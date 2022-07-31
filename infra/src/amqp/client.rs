@@ -17,11 +17,10 @@ use lapin::{
     BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
 };
 use log::{debug, error, warn};
-use opentelemetry::{
-    global,
-    trace::{Span, StatusCode},
-};
+use opentelemetry::trace::{Span, StatusCode};
 use std::{collections::BTreeMap, sync::Arc};
+use tracing::instrument;
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 #[async_trait]
@@ -60,6 +59,7 @@ pub trait IAmqp {
     ) -> Result<(), AmqpError>;
 }
 
+#[derive(Debug)]
 pub struct Amqp {
     conn: Connection,
     channel: Channel,
@@ -180,6 +180,7 @@ impl IAmqp for Amqp {
             .map_err(|_| AmqpError::BindingConsumerError(tag.to_owned()))
     }
 
+    #[instrument(name = "AMQP PUBLISHING")]
     async fn publish(
         &self,
         exchange: &str,
@@ -207,6 +208,7 @@ impl IAmqp for Amqp {
                     .with_message_id(ShortString::from(Uuid::new_v4().to_string()))
                     .with_headers(FieldTable::from(map)),
             )
+            .instrument(tracing::Span::current())
             .await
             .map_err(|_| AmqpError::PublishingError)?;
 
@@ -238,10 +240,9 @@ impl IAmqp for Amqp {
 
         let metadata = Metadata::extract(&header);
 
-        let tracer = global::tracer("handle_event");
-        let mut span = otel::amqp::get_span(def.queue, metadata.traceparent, &tracer);
+        let (_ctx, mut span) = otel::amqp::get_span(metadata.traceparent, "amqp", def.name);
 
-        match handler.exec() {
+        match handler.exec().instrument(tracing::Span::current()).await {
             Ok(_) => match delivery.ack(BasicAckOptions { multiple: true }).await {
                 Ok(_) => {
                     span.set_status(StatusCode::Ok, "success".to_owned());
@@ -496,3 +497,30 @@ impl Amqp {
         format!("{}-dlq-key", queue)
     }
 }
+
+// struct MetadataInjectMap<'a>(&'a mut BTreeMap<ShortString, AMQPValue>);
+// impl<'a> Injector for MetadataInjectMap<'a> {
+//     fn set(&mut self, key: &str, value: String) {
+//         self.0.insert(
+//             ShortString::from(key),
+//             AMQPValue::LongString(LongString::from(value)),
+//         );
+//     }
+// }
+
+// pub struct MetadataExtractMap<'a>(&'a FieldTable);
+// impl<'a> Extractor for MetadataExtractMap<'a> {
+//     fn get(&self, key: &str) -> Option<&str> {
+//         match self.0.inner().get(key) {
+//             Some(v) => match v.as_long_string() {
+//                 Some(s) => Some(Box::leak(s.to_string().into_boxed_str())),
+//                 _ => None,
+//             },
+//             _ => None,
+//         }
+//     }
+
+//     fn keys(&self) -> Vec<&str> {
+//         self.0.inner().keys().map(|k| k.as_str()).collect()
+//     }
+// }
