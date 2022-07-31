@@ -1,5 +1,6 @@
 use crate::errors::AmqpError;
 use async_trait::async_trait;
+use opentelemetry::Context;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
@@ -106,7 +107,7 @@ impl ExchangeDefinition {
 
 #[async_trait]
 pub trait ConsumerHandler {
-    async fn exec(&self) -> Result<(), AmqpError>;
+    async fn exec(&self, ctx: &Context) -> Result<(), AmqpError>;
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -1,5 +1,5 @@
 use opentelemetry::{
-    global::{self, BoxedSpan},
+    global::{BoxedSpan, BoxedTracer},
     trace::{
         SpanContext, SpanId, SpanKind, TraceContextExt, TraceFlags, TraceId, TraceState, Tracer,
     },
@@ -7,7 +7,7 @@ use opentelemetry::{
 };
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-const TRACE_VERSION: &str = "00";
+const TRACE_VERSION: u8 = 0;
 
 pub struct Traceparent {
     pub trace_id: String,
@@ -31,19 +31,19 @@ impl Traceparent {
     }
 
     pub fn string_from_ctx(ctx: &Context) -> String {
-        let trace_id = ctx.get::<TraceId>().unwrap().to_string();
-        let parent_id = ctx.get::<SpanId>().unwrap().to_string();
-        let trace_flags = ctx.get::<TraceFlags>().unwrap().to_u8();
+        let trace_id = ctx.get::<TraceId>().unwrap();
+        let parent_id = ctx.get::<SpanId>().unwrap();
+        let trace_flags = ctx.get::<TraceFlags>().unwrap();
         format!(
-            "{}-{}-{}-{}",
+            "{:02x}-{:032x}-{:016x}-{:02x}",
             TRACE_VERSION, trace_id, parent_id, trace_flags
         )
     }
 }
 
 pub fn get_span(
+    tracer: &BoxedTracer,
     traceparent: String,
-    trace_name: &'static str,
     span_name: &'static str,
 ) -> (Context, BoxedSpan) {
     let parsed = Traceparent::from_string(traceparent);
@@ -58,11 +58,10 @@ pub fn get_span(
 
     tracing::Span::current().set_parent(ctx.clone());
 
-    let tracer = global::tracer(trace_name);
     let span = tracer
         .span_builder(span_name)
         .with_kind(SpanKind::Consumer)
-        .start_with_context(&tracer, &ctx);
+        .start_with_context(tracer, &ctx);
 
     (ctx, span)
 }

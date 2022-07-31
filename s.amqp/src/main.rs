@@ -1,5 +1,6 @@
 mod consumers;
 
+use app::ConsumeIoTMessageServiceImpl;
 use consumers::iot::IoTConsumer;
 use futures_util::StreamExt;
 use infra::{
@@ -7,6 +8,7 @@ use infra::{
     amqp::topology::{AmqpTopology, ExchangeDefinition, QueueBindingDefinition, QueueDefinition},
     env::Config,
     logging, otel,
+    repositories::iot_repository::IoTRepositoryImpl,
 };
 use std::error::Error;
 
@@ -14,6 +16,8 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut cfg = Config::new();
     cfg.app_name = "amqp";
+    cfg.otlp_service_type = "AMQP";
+
     logging::setup(&cfg)?;
     otel::tracing::setup(&cfg)?;
     let amqp = Amqp::new(&cfg).await?;
@@ -39,7 +43,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let spawn = tokio::spawn({
         let cloned = amqp.clone();
-        let handler = IoTConsumer::new();
+        let repo = IoTRepositoryImpl::new();
+        let service = ConsumeIoTMessageServiceImpl::new(repo);
+        let handler = IoTConsumer::new(service);
 
         async move {
             while let Some(delivery) = consumer.next().await {
@@ -54,7 +60,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     });
 
-    tokio::join!(spawn);
+    let (tk1,) = tokio::join!(spawn);
+
+    tk1?;
 
     Ok(())
 }

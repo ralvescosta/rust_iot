@@ -6,7 +6,9 @@ edition = "2021"
 
 [dependencies]
 infra = { path = "../infra" }
+app = { path = "../app" }
 lapin = { version = "2.1.1" }
 tokio = { version = "1.17.0", features = ["full"] }
 futures-util = { version = "0.3.21"}
 async-trait = { version = "0.1.56" }
+opentelemetry = { version = "0.17.0" }

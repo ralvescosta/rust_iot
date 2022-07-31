@@ -7,7 +7,7 @@ members = [
     "s.amqp",
     "s.grpc",
     "s.http",
-    "s.mqtt"
+    "s.mqtt",
 ]
 
 
