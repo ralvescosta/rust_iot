@@ -63,6 +63,7 @@ dependencies = [
 name = "amqp"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "futures-util",
  "infra",
  "lapin",
@@ -88,7 +89,11 @@ checksum = "bb07d2053ccdbe10e2af2995a2f116c1330396493dc1269f6a91d0ae82e19704"
 name = "app"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "infra",
  "log",
+ "opentelemetry",
+ "serde",
 ]
 
 [[package]]
@@ -822,7 +827,6 @@ dependencies = [
 name = "infra"
 version = "0.1.0"
 dependencies = [
- "app",
  "async-trait",
  "bytes",
  "futures-util",
@@ -840,8 +844,11 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-bunyan-formatter",
+ "tracing-futures",
  "tracing-log",
+ "tracing-opentelemetry",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -1002,6 +1009,7 @@ name = "mqtt"
 version = "0.1.0"
 dependencies = [
  "app",
+ "async-trait",
  "bytes",
  "infra",
  "lazy_static",
@@ -2085,6 +2093,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tracing-opentelemetry"
+version = "0.17.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbbe89715c1dbbb790059e2565353978564924ee85017b5fff365c872ff6721f"
+dependencies = [
+ "once_cell",
+ "opentelemetry",
+ "tracing",
+ "tracing-core",
+ "tracing-log",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "tracing-subscriber"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2153,6 +2175,15 @@ dependencies = [
  "idna",
  "matches",
  "percent-encoding",
+]
+
+[[package]]
+name = "uuid"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
+dependencies = [
+ "getrandom",
 ]
 
 [[package]]

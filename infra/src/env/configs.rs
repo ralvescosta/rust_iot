@@ -1,4 +1,4 @@
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum Environment {
     #[default]
     Local,
@@ -7,7 +7,7 @@ pub enum Environment {
     Prod,
 }
 
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Config {
     pub app_name: &'static str,
     pub env: Environment,

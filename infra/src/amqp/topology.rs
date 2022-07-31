@@ -1,6 +1,5 @@
 use crate::errors::AmqpError;
-use lapin::types::FieldTable;
-use std::{rc::Rc, sync::Arc};
+use async_trait::async_trait;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
@@ -24,8 +23,10 @@ pub struct QueueDefinition {
     pub name: &'static str,
     pub bindings: Vec<QueueBindingDefinition>,
     pub with_dlq: bool,
+    pub dlq_name: &'static str,
     pub with_retry: bool,
     pub retry_ttl: Option<i32>,
+    pub retries: Option<i64>,
 }
 
 impl QueueDefinition {
@@ -38,11 +39,13 @@ impl QueueDefinition {
 
     pub fn with_dlq(mut self) -> Self {
         self.with_dlq = true;
+        self.dlq_name = Box::leak(Box::new(self.dlq_name()));
         self
     }
 
-    pub fn with_retry(mut self, milliseconds: i32) -> Self {
+    pub fn with_retry(mut self, milliseconds: i32, retries: i64) -> Self {
         self.with_retry = true;
+        self.retries = Some(retries);
         self.retry_ttl = Some(milliseconds);
         self
     }
@@ -50,6 +53,10 @@ impl QueueDefinition {
     pub fn binding(mut self, bind: QueueBindingDefinition) -> Self {
         self.bindings.push(bind);
         self
+    }
+
+    fn dlq_name(&self) -> String {
+        format!("{}-dlq", self.name)
     }
 }
 
@@ -97,8 +104,9 @@ impl ExchangeDefinition {
     }
 }
 
+#[async_trait]
 pub trait ConsumerHandler {
-    fn exec(&self) -> Result<(), AmqpError>;
+    async fn exec(&self) -> Result<(), AmqpError>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -108,6 +116,7 @@ pub struct ConsumerDefinition {
     pub with_retry: bool,
     pub retries: i64,
     pub with_dlq: bool,
+    pub dlq_name: &'static str,
 }
 
 impl ConsumerDefinition {
@@ -116,8 +125,9 @@ impl ConsumerDefinition {
             name,
             queue: "",
             retries: 1,
-            with_dlq: false,
             with_retry: false,
+            with_dlq: false,
+            dlq_name: "",
         }
     }
 
@@ -167,58 +177,23 @@ impl AmqpTopology {
         Box::new(self)
     }
 
-    pub fn get_consumers_def(&self) -> Vec<ConsumerDefinition> {
-        let mut defs = vec![];
+    pub fn get_consumers_def(&self, queue_name: &str) -> Option<ConsumerDefinition> {
         for queue in self.queues.clone() {
-            defs.push(ConsumerDefinition {
-                name: queue.name,
-                queue: queue.name,
-                retries: 3,
-                with_dlq: queue.with_dlq,
-                with_retry: queue.with_retry,
-            })
-        }
-
-        defs
-    }
-}
-
-#[derive(Debug)]
-pub struct Metadata {
-    pub count: i64,
-    pub traceparent: String,
-}
-
-impl Metadata {
-    pub fn extract(header: &FieldTable) -> Metadata {
-        let count = match header.inner().get("x-death") {
-            Some(value) => match value.as_array() {
-                Some(arr) => match arr.as_slice().get(0) {
-                    Some(value) => match value.as_field_table() {
-                        Some(table) => match table.inner().get("count") {
-                            Some(value) => match value.as_long_long_int() {
-                                Some(long) => long,
-                                _ => 0,
-                            },
-                            _ => 0,
-                        },
-                        _ => 0,
-                    },
+            if queue.name == queue_name {
+                let retries = match queue.retries {
+                    Some(r) => r,
                     _ => 0,
-                },
-                _ => 0,
-            },
-            _ => 0,
-        };
-
-        let traceparent = match header.inner().get("traceparent") {
-            Some(value) => match value.as_long_string() {
-                Some(st) => st.to_string(),
-                _ => "".to_owned(),
-            },
-            _ => "".to_owned(),
-        };
-
-        Metadata { count, traceparent }
+                };
+                return Some(ConsumerDefinition {
+                    name: queue.name,
+                    queue: queue.name,
+                    retries,
+                    with_dlq: queue.with_dlq,
+                    dlq_name: queue.dlq_name,
+                    with_retry: queue.with_retry,
+                });
+            }
+        }
+        None
     }
 }

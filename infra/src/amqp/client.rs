@@ -1,22 +1,27 @@
-use super::topology::{
-    AmqpTopology, ConsumerDefinition, ConsumerHandler, ExchangeDefinition, Metadata,
-    QueueDefinition,
+use super::{
+    topology::{
+        AmqpTopology, ConsumerDefinition, ConsumerHandler, ExchangeDefinition, QueueDefinition,
+    },
+    types::{Metadata, PublishData},
 };
-use crate::{env::Config, errors::AmqpError};
+use crate::{env::Config, errors::AmqpError, otel};
 use async_trait::async_trait;
-
 use lapin::{
     message::Delivery,
     options::{
         BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicPublishOptions,
         ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
     },
+    protocol::basic::AMQPProperties,
     types::{AMQPValue, FieldTable, LongInt, LongString, ShortString},
-    BasicProperties, Channel, Connection, ConnectionProperties, Consumer, Error, ExchangeKind,
-    Queue,
+    BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
 };
 use log::{debug, error, warn};
+use opentelemetry::trace::{Span, StatusCode};
 use std::{collections::BTreeMap, sync::Arc};
+use tracing::instrument;
+use tracing_futures::Instrument;
+use uuid::Uuid;
 
 #[async_trait]
 pub trait IAmqp {
@@ -43,15 +48,18 @@ pub trait IAmqp {
         key: &str,
     ) -> Result<(), AmqpError>;
     async fn consumer(&self, queue: &str, tag: &str) -> Result<Consumer, AmqpError>;
+    async fn publish(&self, exchange: &str, key: &str, data: &PublishData)
+        -> Result<(), AmqpError>;
     async fn install_topology(&self, topology: &AmqpTopology) -> Result<(), AmqpError>;
     async fn consume(
         &self,
-        def: ConsumerDefinition,
+        def: &ConsumerDefinition,
         handler: Arc<dyn ConsumerHandler + Send + Sync>,
-        delivery: Result<Delivery, Error>,
+        delivery: &Delivery,
     ) -> Result<(), AmqpError>;
 }
 
+#[derive(Debug)]
 pub struct Amqp {
     conn: Connection,
     channel: Channel,
@@ -172,6 +180,41 @@ impl IAmqp for Amqp {
             .map_err(|_| AmqpError::BindingConsumerError(tag.to_owned()))
     }
 
+    #[instrument(name = "AMQP PUBLISHING")]
+    async fn publish(
+        &self,
+        exchange: &str,
+        key: &str,
+        data: &PublishData,
+    ) -> Result<(), AmqpError> {
+        let mut map = BTreeMap::new();
+        map.insert(
+            ShortString::from("traceparent"),
+            AMQPValue::LongString(LongString::from(data.clone().traceparent)),
+        );
+
+        self.channel
+            .basic_publish(
+                exchange,
+                key,
+                BasicPublishOptions {
+                    immediate: false,
+                    mandatory: false,
+                },
+                &data.payload,
+                AMQPProperties::default()
+                    .with_content_type(ShortString::from("application/json"))
+                    .with_kind(ShortString::from(data.clone().msg_type))
+                    .with_message_id(ShortString::from(Uuid::new_v4().to_string()))
+                    .with_headers(FieldTable::from(map)),
+            )
+            .instrument(tracing::Span::current())
+            .await
+            .map_err(|_| AmqpError::PublishingError)?;
+
+        Ok(())
+    }
+
     async fn install_topology(&self, topology: &AmqpTopology) -> Result<(), AmqpError> {
         for exch in topology.exchanges.clone() {
             self.install_exchanges(&exch).await?;
@@ -186,19 +229,10 @@ impl IAmqp for Amqp {
 
     async fn consume(
         &self,
-        def: ConsumerDefinition,
+        def: &ConsumerDefinition,
         handler: Arc<dyn ConsumerHandler + Send + Sync>,
-        delivery: Result<Delivery, Error>,
+        delivery: &Delivery,
     ) -> Result<(), AmqpError> {
-        // while let Some(delivery) = consumer.next().await {
-        let delivery = match delivery {
-            Ok(d) => d,
-            Err(error) => {
-                error!("Failed to consume queue message {}", error);
-                return Ok(());
-            }
-        };
-
         let header = match delivery.properties.headers() {
             Some(val) => val.to_owned(),
             None => FieldTable::default(),
@@ -206,10 +240,17 @@ impl IAmqp for Amqp {
 
         let metadata = Metadata::extract(&header);
 
-        match handler.exec() {
+        let (_ctx, mut span) = otel::amqp::get_span(metadata.traceparent, "amqp", def.name);
+
+        match handler.exec().instrument(tracing::Span::current()).await {
             Ok(_) => match delivery.ack(BasicAckOptions { multiple: true }).await {
-                Ok(_) => {}
-                _ => error!("error whiling ack msg"),
+                Ok(_) => {
+                    span.set_status(StatusCode::Ok, "success".to_owned());
+                }
+                _ => {
+                    error!("error whiling ack msg");
+                    span.set_status(StatusCode::Error, "error to ack msg".to_owned());
+                }
             },
             _ if def.with_retry => {
                 warn!("error whiling handling msg, requeuing for latter");
@@ -222,14 +263,17 @@ impl IAmqp for Amqp {
                         .await
                     {
                         Ok(_) => {}
-                        _ => error!("error whiling requeuing"),
+                        _ => {
+                            error!("error whiling requeuing");
+                            span.set_status(StatusCode::Error, "error to requeuing msg".to_owned());
+                        }
                     }
                 } else {
                     match self
                         .channel
                         .basic_publish(
                             "",
-                            "",
+                            def.dlq_name,
                             BasicPublishOptions::default(),
                             &delivery.data,
                             BasicProperties::default(),
@@ -237,7 +281,13 @@ impl IAmqp for Amqp {
                         .await
                     {
                         Ok(_) => {}
-                        _ => error!("error whiling sending to dlq"),
+                        _ => {
+                            error!("error whiling sending to dlq");
+                            span.set_status(
+                                StatusCode::Error,
+                                "error to sending to dlq".to_owned(),
+                            );
+                        }
                     };
                 }
             }
@@ -250,11 +300,13 @@ impl IAmqp for Amqp {
                     .await
                 {
                     Ok(_) => {}
-                    _ => error!("error whiling nack msg"),
+                    _ => {
+                        error!("error whiling nack msg");
+                        span.set_status(StatusCode::Error, "error to nack msg".to_owned());
+                    }
                 }
             }
         }
-        // }
 
         Ok(())
     }
@@ -446,6 +498,29 @@ impl Amqp {
     }
 }
 
-// impl IAmqp for Amqp {
+// struct MetadataInjectMap<'a>(&'a mut BTreeMap<ShortString, AMQPValue>);
+// impl<'a> Injector for MetadataInjectMap<'a> {
+//     fn set(&mut self, key: &str, value: String) {
+//         self.0.insert(
+//             ShortString::from(key),
+//             AMQPValue::LongString(LongString::from(value)),
+//         );
+//     }
+// }
 
+// pub struct MetadataExtractMap<'a>(&'a FieldTable);
+// impl<'a> Extractor for MetadataExtractMap<'a> {
+//     fn get(&self, key: &str) -> Option<&str> {
+//         match self.0.inner().get(key) {
+//             Some(v) => match v.as_long_string() {
+//                 Some(s) => Some(Box::leak(s.to_string().into_boxed_str())),
+//                 _ => None,
+//             },
+//             _ => None,
+//         }
+//     }
+
+//     fn keys(&self) -> Vec<&str> {
+//         self.0.inner().keys().map(|k| k.as_str()).collect()
+//     }
 // }

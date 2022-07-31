@@ -19,4 +19,10 @@ pub enum AmqpError {
 
     #[error("failure to declare consumer `{0}`")]
     BindingConsumerError(String),
+
+    #[error("failure to publish")]
+    PublishingError,
+
+    #[error("failure to parse payload")]
+    ParsePayloadError,
 }

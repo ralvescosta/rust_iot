@@ -1,10 +1,12 @@
+use async_trait::async_trait;
+use infra::amqp::topology::ConsumerHandler;
 use std::sync::Arc;
 
-use infra::amqp::topology::ConsumerHandler;
 pub struct IoTConsumer {}
 
+#[async_trait]
 impl ConsumerHandler for IoTConsumer {
-    fn exec(&self) -> Result<(), infra::errors::AmqpError> {
+    async fn exec(&self) -> Result<(), infra::errors::AmqpError> {
         println!("Consumer");
 
         Ok(())

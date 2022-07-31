@@ -1,9 +1,9 @@
-use std::fmt::Display;
-
+use async_trait::async_trait;
 #[cfg(test)]
 use mockall::automock;
-
+use opentelemetry::Context;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum IoTServiceKind {
@@ -48,6 +48,7 @@ pub enum Message {
 }
 
 #[cfg_attr(test, automock)]
+#[async_trait]
 pub trait IController {
-    fn exec(&self, meta: &MessageMetadata, msg: &Message) -> Result<(), ()>;
+    async fn exec(&self, ctx: &Context, meta: &MessageMetadata, msg: &Message) -> Result<(), ()>;
 }
