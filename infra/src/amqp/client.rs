@@ -205,7 +205,9 @@ impl IAmqp for Amqp {
         let mut map = BTreeMap::new();
         map.insert(
             ShortString::from("traceparent"),
-            AMQPValue::LongString(LongString::from(data.clone().traceparent)),
+            AMQPValue::LongString(LongString::from(otel::amqp::Traceparent::string_from_ctx(
+                &cx,
+            ))),
         );
 
         self.channel

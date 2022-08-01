@@ -33,7 +33,6 @@ pub trait IMQTT {
     async fn handle_event(&self, event: &Event) -> Result<(), MqttError>;
 }
 
-// #[derive(Clone)]
 pub struct MQTT {
     cfg: Box<Config>,
     client: Option<AsyncClient>,

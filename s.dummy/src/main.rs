@@ -21,6 +21,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     logging::setup(&cfg)?;
     otel::tracing::setup(&cfg)?;
+
     let amqp = Amqp::new(&cfg).await?;
 
     let topology = AmqpTopology::new()
