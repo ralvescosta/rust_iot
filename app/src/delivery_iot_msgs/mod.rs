@@ -47,7 +47,7 @@ impl DeliveryIoTMessageService for DeliveryIoTMessageServiceImpl {
         info!("MQTT::IDeliveryIoTMessageService");
 
         let payload = SendToAmqp {};
-        let data = PublishData::new(ctx, payload).unwrap();
+        let data = PublishData::new(payload).unwrap();
 
         match self
             .amqp

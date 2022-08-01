@@ -1,6 +1,5 @@
-use crate::{errors::AmqpError, otel};
+use crate::errors::AmqpError;
 use lapin::types::FieldTable;
-use opentelemetry::Context;
 use serde::Serialize;
 
 #[derive(Debug)]
@@ -51,12 +50,10 @@ pub trait PublishPayload {
 pub struct PublishData {
     pub payload: Box<[u8]>,
     pub msg_type: String,
-    ///traceparent is compos from {trace-version}-{trace-id}-{parent-id}-{trace-flags}
-    pub traceparent: String,
 }
 
 impl PublishData {
-    pub fn new<T>(ctx: &Context, payload: T) -> Result<Self, AmqpError>
+    pub fn new<T>(payload: T) -> Result<Self, AmqpError>
     where
         T: PublishPayload + Serialize,
     {
@@ -67,7 +64,6 @@ impl PublishData {
         Ok(PublishData {
             msg_type: payload.get_type(),
             payload: serialized,
-            traceparent: otel::amqp::Traceparent::string_from_ctx(ctx),
         })
     }
 }

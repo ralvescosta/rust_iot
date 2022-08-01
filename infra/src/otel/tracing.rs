@@ -12,7 +12,7 @@ use opentelemetry::{
 use opentelemetry_otlp::{Protocol, WithExportConfig};
 use std::{error::Error, time::Duration};
 use tonic::metadata::*;
-use tracing_opentelemetry::OpenTelemetrySpanExt;
+// use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
     debug!("telemetry :: starting telemetry setup...");
@@ -46,27 +46,6 @@ pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
         .install_batch(opentelemetry::runtime::Tokio)?;
     debug!("telemetry :: tracer installed");
 
-    // debug!("telemetry :: install metrics...");
-    // let export_config = ExportConfig {
-    //     endpoint: "https://otlp.nr-data.net:4317".to_string(),
-    //     timeout: Duration::from_secs(3),
-    //     protocol: Protocol::Grpc,
-    // };
-    // let meter = opentelemetry_otlp::new_pipeline()
-    //     .metrics(tokio::spawn, tokio_interval_stream)
-    //     .with_exporter(
-    //         opentelemetry_otlp::new_exporter()
-    //             .tonic()
-    //             .with_export_config(export_config)
-    //             .with_metadata(map),
-    //     )
-    //     .with_period(Duration::from_secs(3))
-    //     .with_timeout(Duration::from_secs(10))
-    //     .with_aggregator_selector(selectors::simple::Selector::Exact)
-    //     .build()?;
-    // meter.provider();
-    // debug!("telemetry :: metrics installed");
-
     Ok(())
 }
 
@@ -84,8 +63,6 @@ pub fn new_span(tracer: &BoxedTracer, name: &'static str) -> (Context, BoxedSpan
     let ctx = Context::current_with_span(span);
     let ctx = ctx.with_value(trace_id);
     let ctx = ctx.with_value(span_id);
-
-    tracing::Span::current().set_parent(ctx.clone());
 
     (
         ctx.with_value(flags),
@@ -120,5 +97,14 @@ pub fn ctx_from_ctx(tracer: &BoxedTracer, ctx: &Context, name: &'static str) -> 
         .with_kind(SpanKind::Consumer)
         .start_with_context(tracer, ctx);
 
-    Context::current_with_span(span)
+    let span_ctx = span.span_context();
+    let trace_id = span_ctx.trace_id();
+    let span_id = span_ctx.span_id();
+    let flags = span_ctx.trace_flags();
+
+    let ctx = Context::current_with_span(span);
+    let ctx = ctx.with_value(trace_id);
+    let ctx = ctx.with_value(span_id);
+
+    ctx.with_value(flags)
 }

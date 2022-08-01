@@ -49,7 +49,7 @@ impl ConsumeIotMessageService for ConsumeIoTMessageServiceImpl {
         self.repository.save(ctx).await.map_err(|_| ())?;
 
         let payload = SendToAmqp {};
-        let data = PublishData::new(ctx, payload).unwrap();
+        let data = PublishData::new(payload).unwrap();
 
         self.amqp
             .publish(ctx, "exchange_top_fanout", "", &data)

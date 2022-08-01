@@ -5,7 +5,6 @@ use opentelemetry::{
     },
     Context,
 };
-use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 const TRACE_VERSION: u8 = 0;
 
@@ -15,6 +14,7 @@ pub struct Traceparent {
     pub trace_flags: u8,
 }
 
+///traceparent is compos from {trace-version}-{trace-id}-{parent-id}-{trace-flags}
 impl Traceparent {
     pub fn from_string(traceparent: String) -> Traceparent {
         let splitted: Vec<&str> = traceparent.split("-").collect();
@@ -34,6 +34,7 @@ impl Traceparent {
         let trace_id = ctx.get::<TraceId>().unwrap();
         let parent_id = ctx.get::<SpanId>().unwrap();
         let trace_flags = ctx.get::<TraceFlags>().unwrap();
+
         format!(
             "{:02x}-{:032x}-{:016x}-{:02x}",
             TRACE_VERSION, trace_id, parent_id, trace_flags
@@ -59,8 +60,6 @@ pub fn get_span(
         true,
         TraceState::default(),
     ));
-
-    tracing::Span::current().set_parent(ctx.clone());
 
     let span = tracer
         .span_builder(span_name)

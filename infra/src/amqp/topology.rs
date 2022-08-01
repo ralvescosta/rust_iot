@@ -61,7 +61,7 @@ impl QueueDefinition {
     }
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub enum ExchangeKind {
     #[default]
     Direct,
@@ -77,7 +77,6 @@ impl ExchangeKind {
             ExchangeKind::Fanout => lapin::ExchangeKind::Fanout,
             ExchangeKind::Headers => lapin::ExchangeKind::Headers,
             ExchangeKind::Topic => lapin::ExchangeKind::Topic,
-            _ => lapin::ExchangeKind::Direct,
         }
     }
 }
@@ -186,7 +185,7 @@ impl AmqpTopology {
         self
     }
 
-    pub fn arc(self) -> Box<Self> {
+    pub fn boxed(self) -> Box<Self> {
         Box::new(self)
     }
 
@@ -208,5 +207,100 @@ impl AmqpTopology {
             }
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use lapin::topology;
+
+    use super::*;
+
+    #[test]
+    fn test_queue_binding_definition() {
+        let def = QueueBindingDefinition::new("exchange", "queue", "routingKey");
+
+        assert_eq!(def.exchange, "exchange");
+        assert_eq!(def.queue, "queue");
+        assert_eq!(def.routing_key, "routingKey");
+    }
+
+    #[test]
+    fn test_queue_definition() {
+        let def = QueueDefinition::name("name");
+        assert_eq!(def.name, "name");
+
+        let def = def.with_dlq();
+        assert!(def.with_dlq);
+        assert_eq!(def.dlq_name, "name-dlq");
+
+        let def = def.with_retry(1000, 3);
+        assert!(def.with_retry);
+        assert_eq!(def.retries, Some(3));
+        assert_eq!(def.retry_ttl, Some(1000));
+
+        let binding = QueueBindingDefinition::new("exchange", "queue", "routing_key");
+        let def = def.binding(binding);
+        assert_eq!(def.bindings[0].exchange, binding.exchange);
+    }
+
+    #[test]
+    fn test_exchange_kind() {
+        let kind = ExchangeKind::Direct;
+        assert_eq!(ExchangeKind::map(kind), lapin::ExchangeKind::Direct);
+    }
+
+    #[test]
+    fn test_exchange_definition() {
+        let def = ExchangeDefinition::name("exchange");
+        assert_eq!(def.name, "exchange");
+
+        let def = def.direct();
+        assert_eq!(def.kind, ExchangeKind::Direct);
+
+        let def = def.fanout();
+        assert_eq!(def.kind, ExchangeKind::Fanout);
+
+        let def = def.topic();
+        assert_eq!(def.kind, ExchangeKind::Topic);
+
+        let def = def.header();
+        assert_eq!(def.kind, ExchangeKind::Headers);
+    }
+
+    #[test]
+    fn test_consumer_definition() {
+        let def = ConsumerDefinition::name("consumer");
+        assert_eq!(def.name, "consumer");
+
+        let def = def.queue("queue");
+        assert_eq!(def.queue, "queue");
+
+        let def = def.with_dlq();
+        assert!(def.with_dlq);
+
+        let def = def.with_retry(3);
+        assert!(def.with_retry);
+        assert_eq!(def.retries, 3);
+    }
+
+    #[test]
+    fn test_amqp_topology() {
+        let topology = AmqpTopology::new();
+
+        let exch_def = ExchangeDefinition::name("exchange");
+        let topology = topology.exchange(exch_def.clone());
+        assert_eq!(topology.exchanges[0].name, exch_def.name);
+
+        let queue_def = QueueDefinition::name("queue");
+        let topology = topology.queue(queue_def.clone());
+        assert_eq!(topology.queues[0].name, queue_def.name);
+
+        let consumer_def = topology.get_consumers_def("queue");
+        assert!(consumer_def.is_some());
+
+        let queue_def = QueueDefinition::name("queue").with_retry(1000, 3);
+        let _topology = topology.queue(queue_def.clone());
+        assert!(consumer_def.is_some());
     }
 }

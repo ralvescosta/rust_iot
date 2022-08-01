@@ -24,7 +24,7 @@ pub enum MetadataKind {
 
 impl Display for MetadataKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{}", self.to_string())
     }
 }
 
@@ -36,7 +36,7 @@ pub struct MessageMetadata {
 
 impl Display for MessageMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)
+        write!(f, "{}", self.kind.to_string())
     }
 }
 
@@ -108,4 +108,55 @@ pub trait Controller {
         meta: &MessageMetadata,
         msg: &Message,
     ) -> Result<(), MqttError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_get_metadata_successfully() {
+        let res = MessageMetadata::from_topic("iot/data/temp/device_id/location".to_owned());
+        assert!(res.is_ok());
+
+        let res = res.unwrap();
+        let kind = res.kind;
+        assert_eq!(kind, MetadataKind::IoT(IoTServiceKind::Temp));
+    }
+
+    #[test]
+    fn should_get_metadata_err() {
+        let res = MessageMetadata::from_topic("iot/data/temp".to_owned());
+        assert!(res.is_err());
+
+        let res = MessageMetadata::from_topic("wrong/data/temp".to_owned());
+        assert!(res.is_err());
+
+        let res = MessageMetadata::from_topic("iot/data/unknown/device_id/location".to_owned());
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn should_get_message_successfully() {
+        let res = Message::from_payload(
+            &MetadataKind::IoT(IoTServiceKind::Temp),
+            &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn should_get_message_err() {
+        let res = Message::from_payload(
+            &MetadataKind::IoT(IoTServiceKind::Temp),
+            &Bytes::try_from("").unwrap(),
+        );
+        assert!(res.is_err());
+
+        let res = Message::from_payload(
+            &MetadataKind::IoT(IoTServiceKind::GPS),
+            &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+        );
+        assert!(res.is_err());
+    }
 }
