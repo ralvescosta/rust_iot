@@ -162,10 +162,10 @@ impl IMQTT for MQTT {
 
 #[cfg(test)]
 mod tests {
-    use rumqttc::Publish;
-
     use super::*;
-    use crate::mqtt::types::MockController;
+    use crate::mqtt::types::{Controller, IoTServiceKind, MockController};
+    use bytes::Bytes;
+    use rumqttc::Publish;
 
     #[test]
     fn should_connect() {
@@ -173,140 +173,76 @@ mod tests {
         mq.connect();
     }
 
-    #[test]
-    fn should_get_metadata_successfully() {
-        // let mq = MQTT::new(Config::mock());
+    #[tokio::test]
+    async fn should_handle_event_successfully() {
+        let mut mocked_controller = MockController::new();
 
-        // let res = mq.get_metadata("iot/data/temp/device_id/location".to_owned());
-        // assert!(res.is_ok());
+        mocked_controller
+            .expect_exec()
+            .times(1)
+            .returning(|_ctx, _msg, _meta| Ok(()));
 
-        // let res = res.unwrap();
-        // let kind = res.kind;
-        // assert_eq!(kind, MetadataKind::IoT(IoTServiceKind::Temp));
+        let mut map: HashMap<MetadataKind, Arc<dyn Controller + Sync + Send>> = HashMap::default();
+        map.insert(
+            MetadataKind::IoT(IoTServiceKind::Temp),
+            Arc::new(mocked_controller),
+        );
+
+        let mq = MQTT::mock(Config::mock(), map);
+
+        let event = Event::Incoming(Packet::Publish(Publish {
+            dup: true,
+            payload: Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+            pkid: 10,
+            qos: QoS::AtMostOnce,
+            retain: false,
+            topic: "iot/data/temp/device_id/location".to_owned(),
+        }));
+
+        let res = mq.handle_event(&event).await;
+        assert!(res.is_ok());
     }
 
-    #[test]
-    fn should_get_metadata_err() {
-        // let mq = MQTT::new(Config::mock());
+    #[tokio::test]
+    async fn should_handle_event_err() {
+        let mut mocked_controller = MockController::new();
 
-        // let res = mq.get_metadata("iot/data/temp".to_owned());
-        // assert!(res.is_err());
+        mocked_controller
+            .expect_exec()
+            .times(1)
+            .returning(|_ctx, _msg, _meta| Err(MqttError::InternalError {}));
 
-        // let res = mq.get_metadata("wrong/data/temp".to_owned());
-        // assert!(res.is_err());
+        let mut map: HashMap<MetadataKind, Arc<dyn Controller + Sync + Send>> = HashMap::default();
+        map.insert(
+            MetadataKind::IoT(IoTServiceKind::Temp),
+            Arc::new(mocked_controller),
+        );
 
-        // let res = mq.get_metadata("iot/data/unknown/device_id/location".to_owned());
-        // assert!(res.is_err());
-    }
+        let mq = MQTT::mock(Config::mock(), map);
 
-    #[test]
-    fn should_get_message_successfully() {
-        // let mq = MQTT::new(Config::mock());
+        let mut publish = Publish {
+            dup: true,
+            payload: Bytes::new(),
+            pkid: 10,
+            qos: QoS::AtMostOnce,
+            retain: false,
+            topic: "".to_owned(),
+        };
+        let res = mq
+            .handle_event(&Event::Incoming(Packet::Publish(publish.clone())))
+            .await;
+        assert!(res.is_err());
 
-        // let res = mq.get_message(
-        //     &MetadataKind::IoT(IoTServiceKind::Temp),
-        //     &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
-        // );
-        // assert!(res.is_ok());
-    }
+        publish.topic = "iot/data/temp/device_id/location".to_owned();
+        let res = mq
+            .handle_event(&Event::Incoming(Packet::Publish(publish.clone())))
+            .await;
+        assert!(res.is_err());
 
-    #[test]
-    fn should_get_message_err() {
-        // let mq = MQTT::new(Config::mock());
-
-        // let res = mq.get_message(
-        //     &MetadataKind::IoT(IoTServiceKind::Temp),
-        //     &Bytes::try_from("").unwrap(),
-        // );
-        // assert!(res.is_err());
-
-        // let res = mq.get_message(
-        //     &MetadataKind::IoT(IoTServiceKind::GPS),
-        //     &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
-        // );
-        // assert!(res.is_err());
-    }
-
-    #[test]
-    fn should_handle_event_successfully() {
-        // let mut mocked_controller = MockIController::new();
-
-        // mocked_controller
-        //     .expect_exec()
-        //     .with(
-        //         eq(MessageMetadata {
-        //             kind: MetadataKind::IoT(IoTServiceKind::Temp),
-        //             topic: "iot/data/temp/device_id/location".to_owned(),
-        //         }),
-        //         eq(Message::Temp(TempMessage {
-        //             temp: 39.9,
-        //             time: 99999999,
-        //         })),
-        //     )
-        //     .times(1)
-        //     .returning(|_msg, _meta| Ok(()));
-
-        // let mut map: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>> = HashMap::default();
-        // map.insert(
-        //     MetadataKind::IoT(IoTServiceKind::Temp),
-        //     Arc::new(mocked_controller),
-        // );
-
-        // let mq = MQTT::mock(Config::mock(), map);
-
-        // let event = Event::Incoming(Packet::Publish(Publish {
-        //     dup: true,
-        //     payload: Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
-        //     pkid: 10,
-        //     qos: QoS::AtMostOnce,
-        //     retain: false,
-        //     topic: "iot/data/temp/device_id/location".to_owned(),
-        // }));
-
-        // mq.handle_event(&event);
-    }
-
-    #[test]
-    fn should_handle_event_err() {
-        // let mut mocked_controller = MockIController::new();
-
-        // mocked_controller
-        //     .expect_exec()
-        //     .with(
-        //         eq(MessageMetadata {
-        //             kind: MetadataKind::IoT(IoTServiceKind::Temp),
-        //             topic: "iot/data/temp/device_id/location".to_owned(),
-        //         }),
-        //         eq(Message::Temp(TempMessage {
-        //             temp: 39.9,
-        //             time: 99999999,
-        //         })),
-        //     )
-        //     .times(1)
-        //     .returning(|_msg, _meta| Err(()));
-
-        // let mut map: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>> = HashMap::default();
-        // map.insert(
-        //     MetadataKind::IoT(IoTServiceKind::Temp),
-        //     Arc::new(mocked_controller),
-        // );
-
-        // let mq = MQTT::mock(Config::mock(), map);
-
-        // let mut publish = Publish {
-        //     dup: true,
-        //     payload: Bytes::new(),
-        //     pkid: 10,
-        //     qos: QoS::AtMostOnce,
-        //     retain: false,
-        //     topic: "".to_owned(),
-        // };
-        // mq.handle_event(&Event::Incoming(Packet::Publish(publish.clone())));
-
-        // publish.topic = "iot/data/temp/device_id/location".to_owned();
-        // mq.handle_event(&Event::Incoming(Packet::Publish(publish.clone())));
-
-        // publish.payload = Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap();
-        // mq.handle_event(&Event::Incoming(Packet::Publish(publish.clone())));
+        publish.payload = Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap();
+        let res = mq
+            .handle_event(&Event::Incoming(Packet::Publish(publish.clone())))
+            .await;
+        assert!(res.is_err());
     }
 }

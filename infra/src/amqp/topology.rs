@@ -77,7 +77,6 @@ impl ExchangeKind {
             ExchangeKind::Fanout => lapin::ExchangeKind::Fanout,
             ExchangeKind::Headers => lapin::ExchangeKind::Headers,
             ExchangeKind::Topic => lapin::ExchangeKind::Topic,
-            _ => lapin::ExchangeKind::Direct,
         }
     }
 }
