@@ -66,8 +66,20 @@ pub enum ExchangeKind {
     #[default]
     Direct,
     Fanout,
-    Options,
-    Header,
+    Topic,
+    Headers,
+}
+
+impl ExchangeKind {
+    pub fn map(kind: ExchangeKind) -> lapin::ExchangeKind {
+        match kind {
+            ExchangeKind::Direct => lapin::ExchangeKind::Direct,
+            ExchangeKind::Fanout => lapin::ExchangeKind::Fanout,
+            ExchangeKind::Headers => lapin::ExchangeKind::Headers,
+            ExchangeKind::Topic => lapin::ExchangeKind::Topic,
+            _ => lapin::ExchangeKind::Direct,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -95,12 +107,12 @@ impl ExchangeDefinition {
     }
 
     pub fn header(mut self) -> Self {
-        self.kind = ExchangeKind::Header;
+        self.kind = ExchangeKind::Headers;
         self
     }
 
-    pub fn options(mut self) -> Self {
-        self.kind = ExchangeKind::Options;
+    pub fn topic(mut self) -> Self {
+        self.kind = ExchangeKind::Topic;
         self
     }
 }

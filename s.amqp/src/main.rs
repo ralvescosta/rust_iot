@@ -10,6 +10,7 @@ use infra::{
     logging, otel,
     repositories::iot_repository::IoTRepositoryImpl,
 };
+use log::error;
 use std::error::Error;
 
 #[tokio::main]
@@ -40,11 +41,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let def = topology.get_consumers_def("queue_top_test1").unwrap();
     let mut consumer = amqp.consumer(def.queue, def.queue).await?;
-
-    let spawn = tokio::spawn({
+    let spawn_iot = tokio::spawn({
         let cloned = amqp.clone();
         let repo = IoTRepositoryImpl::new();
-        let service = ConsumeIoTMessageServiceImpl::new(repo);
+        let service = ConsumeIoTMessageServiceImpl::new(repo, amqp.clone());
         let handler = IoTConsumer::new(service);
 
         async move {
@@ -52,15 +52,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 match delivery {
                     Ok(d) => match cloned.consume(&def, handler.clone(), &d).await {
                         Ok(_) => {}
-                        _ => {}
+                        _ => error!("errors consume msg"),
                     },
-                    _ => {}
+                    _ => error!("error receiving delivery msg"),
                 };
             }
         }
     });
 
-    let (tk1,) = tokio::join!(spawn);
+    let (tk1,) = tokio::join!(spawn_iot);
 
     tk1?;
 

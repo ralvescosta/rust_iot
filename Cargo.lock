@@ -68,6 +68,7 @@ dependencies = [
  "futures-util",
  "infra",
  "lapin",
+ "log",
  "opentelemetry",
  "tokio",
 ]
@@ -500,6 +501,20 @@ name = "downcast"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1435fa1053d8b2fbbe9be7e97eca7f33d37b28409959813daefc1446a14247f1"
+
+[[package]]
+name = "dummy"
+version = "0.1.0"
+dependencies = [
+ "app",
+ "async-trait",
+ "futures-util",
+ "infra",
+ "lapin",
+ "log",
+ "opentelemetry",
+ "tokio",
+]
 
 [[package]]
 name = "either"

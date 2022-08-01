@@ -48,10 +48,14 @@ pub fn get_span(
 ) -> (Context, BoxedSpan) {
     let parsed = Traceparent::from_string(traceparent);
 
+    let trace_id = TraceId::from_hex(&parsed.trace_id).unwrap();
+    let span_id = SpanId::from_hex(&parsed.span_id).unwrap();
+    let trace_flags = TraceFlags::new(parsed.trace_flags);
+
     let ctx = Context::new().with_remote_span_context(SpanContext::new(
-        TraceId::from_hex(&parsed.trace_id).unwrap(),
-        SpanId::from_hex(&parsed.span_id).unwrap(),
-        TraceFlags::new(parsed.trace_flags),
+        trace_id,
+        span_id,
+        trace_flags,
         true,
         TraceState::default(),
     ));
@@ -63,5 +67,8 @@ pub fn get_span(
         .with_kind(SpanKind::Consumer)
         .start_with_context(tracer, &ctx);
 
-    (ctx, span)
+    let ctx = ctx.with_value(trace_id);
+    let ctx = ctx.with_value(span_id);
+
+    (ctx.with_value(trace_flags), span)
 }
