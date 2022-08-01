@@ -15,8 +15,6 @@ Also in this project we take care about some well-known practices to web develop
 
 - **AMQP Binaries**
 
-  - For HTTP the project has been used [lapin](https://crates.io/crates/lapin) create.
-
   - **amqp binary:**
 
     - The main ideia for the s.amqp binary is that receive the IoT do some works and "notify" the other services about the IoT data.
