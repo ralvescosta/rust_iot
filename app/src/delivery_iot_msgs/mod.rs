@@ -9,26 +9,26 @@ use serde::{Deserialize, Serialize};
 use std::{error::Error, sync::Arc};
 
 #[async_trait]
-pub trait IDeliveryIoTMessageService {
+pub trait DeliveryIoTMessageService {
     async fn delivery(&self, ctx: &Context, data: u8) -> Result<(), Box<dyn Error>>;
 }
 
 #[derive(Clone)]
-pub struct DeliveryIoTMessageService {
+pub struct DeliveryIoTMessageServiceImpl {
     amqp: Arc<dyn IAmqp + Send + Sync>,
 }
 
-impl DeliveryIoTMessageService {
+impl DeliveryIoTMessageServiceImpl {
     pub fn new(
         amqp: Arc<dyn IAmqp + Send + Sync>,
-    ) -> Arc<dyn IDeliveryIoTMessageService + Sync + Send + 'static> {
-        Arc::new(DeliveryIoTMessageService { amqp })
+    ) -> Arc<dyn DeliveryIoTMessageService + Sync + Send + 'static> {
+        Arc::new(DeliveryIoTMessageServiceImpl { amqp })
     }
 
     pub fn mock(
         amqp: Arc<dyn IAmqp + Send + Sync>,
-    ) -> Option<Arc<dyn IDeliveryIoTMessageService + Sync + Send + 'static>> {
-        Some(Arc::new(DeliveryIoTMessageService { amqp }))
+    ) -> Option<Arc<dyn DeliveryIoTMessageService + Sync + Send + 'static>> {
+        Some(Arc::new(DeliveryIoTMessageServiceImpl { amqp }))
     }
 }
 
@@ -42,7 +42,7 @@ impl PublishPayload for SendToAmqp {
 }
 
 #[async_trait]
-impl IDeliveryIoTMessageService for DeliveryIoTMessageService {
+impl DeliveryIoTMessageService for DeliveryIoTMessageServiceImpl {
     async fn delivery(&self, ctx: &Context, _data: u8) -> Result<(), Box<dyn Error>> {
         info!("MQTT::IDeliveryIoTMessageService");
 
@@ -52,6 +52,7 @@ impl IDeliveryIoTMessageService for DeliveryIoTMessageService {
         match self
             .amqp
             .publish(
+                ctx,
                 "exchange_top_test1",
                 "exchange_top_test1_queue_top_test1",
                 &data,

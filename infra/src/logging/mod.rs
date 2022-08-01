@@ -21,9 +21,14 @@ pub fn setup(cfg: &Config) -> Result<(), LoggingError> {
     let level_filter = get_log_level_filter(cfg);
 
     let mut filter_mqtt = None;
+    let mut filter_lapin = None;
     if !cfg.enable_rumqttc_logging {
         filter_mqtt = Some(FilterFn::new(|meta| {
             meta.module_path() != Some("rumqttc::state")
+        }));
+
+        filter_lapin = Some(FilterFn::new(|meta| {
+            meta.module_path() != Some("lapin::channels")
         }));
     }
 
@@ -44,7 +49,8 @@ pub fn setup(cfg: &Config) -> Result<(), LoggingError> {
             .with(level_filter)
             .with(fmt_json)
             .with(fmt_pretty)
-            .with(filter_mqtt),
+            .with(filter_mqtt)
+            .with(filter_lapin),
     )
     .map_err(|_| LoggingError::InternalError {})?;
 

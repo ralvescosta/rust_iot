@@ -1,6 +1,6 @@
 mod controllers;
 
-use app::DeliveryIoTMessageService;
+use app::DeliveryIoTMessageServiceImpl;
 use infra::{
     amqp::client::Amqp,
     env::Config,
@@ -11,20 +11,20 @@ use infra::{
     },
     otel,
 };
-
 use log::error;
-
 use std::error::Error;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let mut cfg = Config::new();
     cfg.app_name = "mqtt";
+    cfg.otlp_service_type = "MQTT";
+
     logging::setup(&cfg)?;
     otel::tracing::setup(&cfg)?;
     let amqp = Amqp::new(&cfg).await?;
 
-    let delivery_service = DeliveryIoTMessageService::new(amqp.clone());
+    let delivery_service = DeliveryIoTMessageServiceImpl::new(amqp.clone());
 
     let mut mqtt = MQTT::new(cfg);
     let mut eventloop = mqtt.connect();
@@ -40,7 +40,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         match eventloop.poll().await {
             Ok(event) => {
-                mqtt.handle_event(&event).await;
+                match mqtt.handle_event(&event).await {
+                    Ok(_) => {}
+                    Err(err) => error!("{:?}", err),
+                };
             }
             Err(err) => error!("{:?}", err),
         }

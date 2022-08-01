@@ -1,7 +1,7 @@
 use crate::env::Config;
 use log::debug;
 use opentelemetry::{
-    global::{self, BoxedSpan},
+    global::{BoxedSpan, BoxedTracer},
     sdk::{
         trace::{self, IdGenerator, Sampler},
         Resource,
@@ -70,13 +70,11 @@ pub fn setup(cfg: &Config) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn new_span(trace_name: &'static str, span_name: &'static str) -> (Context, BoxedSpan) {
-    let tracer = global::tracer(trace_name);
-
+pub fn new_span(tracer: &BoxedTracer, name: &'static str) -> (Context, BoxedSpan) {
     let span = tracer
-        .span_builder(span_name)
+        .span_builder(name)
         .with_kind(SpanKind::Consumer)
-        .start(&tracer);
+        .start(tracer);
 
     let span_ctx = span.span_context();
     let trace_id = span_ctx.trace_id();
@@ -91,6 +89,36 @@ pub fn new_span(trace_name: &'static str, span_name: &'static str) -> (Context, 
 
     (
         ctx.with_value(flags),
-        tracer.start_with_context(span_name, &ctx),
+        tracer
+            .span_builder(name)
+            .with_kind(SpanKind::Consumer)
+            .start_with_context(tracer, &ctx),
     )
+}
+
+pub fn new_ctx(tracer: &BoxedTracer, name: &'static str) -> Context {
+    let span = tracer
+        .span_builder(name)
+        .with_kind(SpanKind::Consumer)
+        .start(tracer);
+
+    let span_ctx = span.span_context();
+    let trace_id = span_ctx.trace_id();
+    let span_id = span_ctx.span_id();
+    let flags = span_ctx.trace_flags();
+
+    let ctx = Context::current_with_span(span);
+    let ctx = ctx.with_value(trace_id);
+    let ctx = ctx.with_value(span_id);
+
+    ctx.with_value(flags)
+}
+
+pub fn ctx_from_ctx(tracer: &BoxedTracer, ctx: &Context, name: &'static str) -> Context {
+    let span = tracer
+        .span_builder(name)
+        .with_kind(SpanKind::Consumer)
+        .start_with_context(tracer, ctx);
+
+    Context::current_with_span(span)
 }

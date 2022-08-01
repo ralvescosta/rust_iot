@@ -1,16 +1,16 @@
-use super::types::{
-    IController, IoTServiceKind, Message, MessageMetadata, MetadataKind, TempMessage,
-};
+use super::types::{Controller, Message, MessageMetadata, MetadataKind};
 use crate::{env::Config, errors::MqttError, otel};
 use async_trait::async_trait;
-use bytes::Bytes;
 use log::{debug, error};
 #[cfg(test)]
 use mockall::predicate::*;
-use opentelemetry::trace::{Span, StatusCode};
+use opentelemetry::{
+    global::{self, BoxedTracer},
+    trace::FutureExt,
+    Context,
+};
 use rumqttc::{AsyncClient, Event, EventLoop, MqttOptions, Packet, QoS};
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tracing_futures::Instrument;
 
 #[async_trait]
 pub trait IMQTT {
@@ -20,25 +20,25 @@ pub trait IMQTT {
         topic: &str,
         qos: QoS,
         kind: MetadataKind,
-        controller: Arc<dyn IController + Sync + Send>,
+        controller: Arc<dyn Controller + Sync + Send>,
     ) -> Result<(), MqttError>;
     async fn publish(
         &self,
+        ctx: &Context,
         topic: &str,
         qos: QoS,
         retain: bool,
         payload: &[u8],
     ) -> Result<(), MqttError>;
-    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, MqttError>;
-    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, MqttError>;
-    async fn handle_event(&self, event: &Event);
+    async fn handle_event(&self, event: &Event) -> Result<(), MqttError>;
 }
 
-#[derive(Clone)]
+// #[derive(Clone)]
 pub struct MQTT {
     cfg: Box<Config>,
     client: Option<AsyncClient>,
-    dispatchers: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>>,
+    dispatchers: HashMap<MetadataKind, Arc<dyn Controller + Sync + Send>>,
+    tracer: BoxedTracer,
 }
 
 impl MQTT {
@@ -47,18 +47,20 @@ impl MQTT {
             cfg,
             client: None,
             dispatchers: HashMap::default(),
+            tracer: global::tracer("mqtt"),
         })
     }
 
     #[cfg(test)]
     pub fn mock(
         cfg: Box<Config>,
-        dispatchers: HashMap<MetadataKind, Arc<dyn IController + Sync + Send>>,
+        dispatchers: HashMap<MetadataKind, Arc<dyn Controller + Sync + Send>>,
     ) -> Box<dyn IMQTT + Send + Sync> {
         Box::new(MQTT {
             cfg,
             client: None,
             dispatchers,
+            tracer: global::tracer("mqtt"),
         })
     }
 }
@@ -85,15 +87,16 @@ impl IMQTT for MQTT {
         topic: &str,
         qos: QoS,
         kind: MetadataKind,
-        controller: Arc<dyn IController + Sync + Send>,
+        controller: Arc<dyn Controller + Sync + Send>,
     ) -> Result<(), MqttError> {
         debug!("subscribing in topic: {:?}...", topic);
 
-        let res = self.client.clone().unwrap().subscribe(topic, qos).await;
-        if res.is_err() {
-            error!("subscribe error - {:?}", res);
-            return Err(MqttError::InternalError {});
-        }
+        self.client
+            .clone()
+            .unwrap()
+            .subscribe(topic, qos)
+            .await
+            .map_err(|_| MqttError::SubscribeError {})?;
 
         self.dispatchers.insert(kind, controller);
 
@@ -103,6 +106,7 @@ impl IMQTT for MQTT {
 
     async fn publish(
         &self,
+        ctx: &Context,
         topic: &str,
         qos: QoS,
         retain: bool,
@@ -110,108 +114,50 @@ impl IMQTT for MQTT {
     ) -> Result<(), MqttError> {
         debug!("publishing in a topic {:?}", topic);
 
-        let res = self
-            .client
+        let cx = otel::tracing::ctx_from_ctx(&self.tracer, ctx, "mqtt publish");
+
+        self.client
             .clone()
             .unwrap()
             .publish(topic, qos, retain, payload)
-            .instrument(tracing::Span::current())
-            .await;
-        if res.is_err() {
-            error!("publish error - {:?}", res);
-            return Err(MqttError::InternalError {});
-        }
+            .with_context(cx)
+            .await
+            .map_err(|_| MqttError::PublishingError {})?;
 
         debug!("message published");
         Ok(())
     }
 
-    fn get_metadata(&self, topic: String) -> Result<MessageMetadata, MqttError> {
-        let splitted = topic.split("/").collect::<Vec<&str>>();
-        if splitted.len() < 3 && splitted[0] != "iot" {
-            error!("unformatted topic");
-            return Err(MqttError::UnformattedTopic {});
-        }
-
-        match splitted[2] {
-            "temp" => {
-                if splitted.len() < 4 {
-                    error!("wrong temp topic");
-                    return Err(MqttError::UnformattedTopic {});
-                }
-
-                Ok(MessageMetadata {
-                    kind: MetadataKind::IoT(IoTServiceKind::Temp),
-                    topic: topic.clone(),
-                })
-            }
-            _ => {
-                error!("unknown message kind");
-                return Err(MqttError::UnknownMessageKind {});
-            }
-        }
-    }
-
-    fn get_message(&self, kind: &MetadataKind, payload: &Bytes) -> Result<Message, MqttError> {
-        match kind {
-            MetadataKind::IoT(IoTServiceKind::Temp) => {
-                let msg = serde_json::from_slice::<TempMessage>(payload);
-                if msg.is_err() {
-                    error!("msg conversion error - {:?}", msg);
-                    return Err(MqttError::InternalError {});
-                }
-
-                Ok(Message::Temp(msg.unwrap()))
-            }
-            _ => {
-                error!("unknown message kind");
-                return Err(MqttError::UnknownMessageKind {});
-            }
-        }
-    }
-
-    async fn handle_event(&self, event: &Event) {
+    async fn handle_event(&self, event: &Event) -> Result<(), MqttError> {
         if let Event::Incoming(Packet::Publish(msg)) = event.to_owned() {
             debug!("message received in a topic {:?}", msg.topic);
 
-            let metadata = self.get_metadata(msg.topic);
-            if metadata.is_err() {
-                return;
-            }
-            let metadata = metadata.unwrap();
+            let metadata = MessageMetadata::from_topic(msg.topic)?;
 
             let name = format!("mqtt::event::{:?}", metadata.kind);
-            let (ctx, mut span) = otel::tracing::new_span("mqtt", Box::leak(name.into_boxed_str()));
+            let ctx = otel::tracing::new_ctx(&self.tracer, Box::leak(name.into_boxed_str()));
 
-            let data = self.get_message(&metadata.kind, &msg.payload);
-            if data.is_err() {
-                span.set_status(StatusCode::Error, format!("ignored message"));
-                return;
-            }
-            let data = data.unwrap();
+            let data = Message::from_payload(&metadata.kind, &msg.payload)?;
 
             let controller = self.dispatchers.get(&metadata.kind);
             if controller.is_none() {
-                span.set_status(StatusCode::Error, format!("ignored message"));
-                return;
+                return Err(MqttError::InternalError {});
             }
 
-            match controller
-                .unwrap()
-                .exec(&ctx.clone(), &metadata, &data)
-                .instrument(tracing::Span::current())
-                .await
-            {
+            return match controller.unwrap().exec(&ctx, &metadata, &data).await {
                 Ok(_) => {
                     debug!("event processed successfully");
-                    span.set_status(StatusCode::Ok, format!("event processed successfully"));
+                    // span.set_status(StatusCode::Ok, format!("event processed successfully"));
+                    Ok(())
                 }
                 Err(e) => {
                     error!("failed to handle the event - {:?}", e);
-                    span.set_status(StatusCode::Error, format!("failed to handle the event"));
+                    // span.set_status(StatusCode::Error, format!("failed to handle the event"));
+                    Err(e)
                 }
-            }
+            };
         }
+        Ok(())
     }
 }
 
@@ -220,7 +166,7 @@ mod tests {
     use rumqttc::Publish;
 
     use super::*;
-    use crate::mqtt::types::MockIController;
+    use crate::mqtt::types::MockController;
 
     #[test]
     fn should_connect() {
@@ -230,56 +176,56 @@ mod tests {
 
     #[test]
     fn should_get_metadata_successfully() {
-        let mq = MQTT::new(Config::mock());
+        // let mq = MQTT::new(Config::mock());
 
-        let res = mq.get_metadata("iot/data/temp/device_id/location".to_owned());
-        assert!(res.is_ok());
+        // let res = mq.get_metadata("iot/data/temp/device_id/location".to_owned());
+        // assert!(res.is_ok());
 
-        let res = res.unwrap();
-        let kind = res.kind;
-        assert_eq!(kind, MetadataKind::IoT(IoTServiceKind::Temp));
+        // let res = res.unwrap();
+        // let kind = res.kind;
+        // assert_eq!(kind, MetadataKind::IoT(IoTServiceKind::Temp));
     }
 
     #[test]
     fn should_get_metadata_err() {
-        let mq = MQTT::new(Config::mock());
+        // let mq = MQTT::new(Config::mock());
 
-        let res = mq.get_metadata("iot/data/temp".to_owned());
-        assert!(res.is_err());
+        // let res = mq.get_metadata("iot/data/temp".to_owned());
+        // assert!(res.is_err());
 
-        let res = mq.get_metadata("wrong/data/temp".to_owned());
-        assert!(res.is_err());
+        // let res = mq.get_metadata("wrong/data/temp".to_owned());
+        // assert!(res.is_err());
 
-        let res = mq.get_metadata("iot/data/unknown/device_id/location".to_owned());
-        assert!(res.is_err());
+        // let res = mq.get_metadata("iot/data/unknown/device_id/location".to_owned());
+        // assert!(res.is_err());
     }
 
     #[test]
     fn should_get_message_successfully() {
-        let mq = MQTT::new(Config::mock());
+        // let mq = MQTT::new(Config::mock());
 
-        let res = mq.get_message(
-            &MetadataKind::IoT(IoTServiceKind::Temp),
-            &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
-        );
-        assert!(res.is_ok());
+        // let res = mq.get_message(
+        //     &MetadataKind::IoT(IoTServiceKind::Temp),
+        //     &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+        // );
+        // assert!(res.is_ok());
     }
 
     #[test]
     fn should_get_message_err() {
-        let mq = MQTT::new(Config::mock());
+        // let mq = MQTT::new(Config::mock());
 
-        let res = mq.get_message(
-            &MetadataKind::IoT(IoTServiceKind::Temp),
-            &Bytes::try_from("").unwrap(),
-        );
-        assert!(res.is_err());
+        // let res = mq.get_message(
+        //     &MetadataKind::IoT(IoTServiceKind::Temp),
+        //     &Bytes::try_from("").unwrap(),
+        // );
+        // assert!(res.is_err());
 
-        let res = mq.get_message(
-            &MetadataKind::IoT(IoTServiceKind::GPS),
-            &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
-        );
-        assert!(res.is_err());
+        // let res = mq.get_message(
+        //     &MetadataKind::IoT(IoTServiceKind::GPS),
+        //     &Bytes::try_from("{\"temp\": 39.9, \"time\": 99999999}").unwrap(),
+        // );
+        // assert!(res.is_err());
     }
 
     #[test]

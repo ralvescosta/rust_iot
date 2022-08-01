@@ -1,9 +1,13 @@
 use async_trait::async_trait;
+use bytes::Bytes;
+use log::error;
 #[cfg(test)]
 use mockall::automock;
 use opentelemetry::Context;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+
+use crate::errors::MqttError;
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum IoTServiceKind {
@@ -36,6 +40,34 @@ impl Display for MessageMetadata {
     }
 }
 
+impl MessageMetadata {
+    pub fn from_topic(topic: String) -> Result<MessageMetadata, MqttError> {
+        let splitted = topic.split("/").collect::<Vec<&str>>();
+        if splitted.len() < 3 && splitted[0] != "iot" {
+            error!("unformatted topic");
+            return Err(MqttError::UnformattedTopicError {});
+        }
+
+        match splitted[2] {
+            "temp" => {
+                if splitted.len() < 4 {
+                    error!("wrong temp topic");
+                    return Err(MqttError::UnformattedTopicError {});
+                }
+
+                Ok(MessageMetadata {
+                    kind: MetadataKind::IoT(IoTServiceKind::Temp),
+                    topic: topic.clone(),
+                })
+            }
+            _ => {
+                error!("unknown message kind");
+                return Err(MqttError::UnknownMessageKindError {});
+            }
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 pub struct TempMessage {
     pub temp: f32,
@@ -47,8 +79,33 @@ pub enum Message {
     Temp(TempMessage),
 }
 
+impl Message {
+    pub fn from_payload(kind: &MetadataKind, payload: &Bytes) -> Result<Message, MqttError> {
+        match kind {
+            MetadataKind::IoT(IoTServiceKind::Temp) => {
+                let msg = serde_json::from_slice::<TempMessage>(payload);
+                if msg.is_err() {
+                    error!("msg conversion error - {:?}", msg);
+                    return Err(MqttError::InternalError {});
+                }
+
+                Ok(Message::Temp(msg.unwrap()))
+            }
+            _ => {
+                error!("unknown message kind");
+                return Err(MqttError::UnknownMessageKindError {});
+            }
+        }
+    }
+}
+
 #[cfg_attr(test, automock)]
 #[async_trait]
-pub trait IController {
-    async fn exec(&self, ctx: &Context, meta: &MessageMetadata, msg: &Message) -> Result<(), ()>;
+pub trait Controller {
+    async fn exec(
+        &self,
+        ctx: &Context,
+        meta: &MessageMetadata,
+        msg: &Message,
+    ) -> Result<(), MqttError>;
 }

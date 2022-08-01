@@ -1,6 +1,7 @@
 use super::{
     topology::{
-        AmqpTopology, ConsumerDefinition, ConsumerHandler, ExchangeDefinition, QueueDefinition,
+        AmqpTopology, ConsumerDefinition, ConsumerHandler, ExchangeDefinition,
+        ExchangeKind as MyExchangeKind, QueueDefinition,
     },
     types::{Metadata, PublishData},
 };
@@ -17,10 +18,12 @@ use lapin::{
     BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
 };
 use log::{debug, error, warn};
-use opentelemetry::trace::{Span, StatusCode};
+use opentelemetry::{
+    global::{self, BoxedTracer},
+    trace::{FutureExt, Span, StatusCode},
+    Context,
+};
 use std::{collections::BTreeMap, sync::Arc};
-use tracing::instrument;
-use tracing_futures::Instrument;
 use uuid::Uuid;
 
 #[async_trait]
@@ -48,8 +51,13 @@ pub trait IAmqp {
         key: &str,
     ) -> Result<(), AmqpError>;
     async fn consumer(&self, queue: &str, tag: &str) -> Result<Consumer, AmqpError>;
-    async fn publish(&self, exchange: &str, key: &str, data: &PublishData)
-        -> Result<(), AmqpError>;
+    async fn publish(
+        &self,
+        ctx: &Context,
+        exchange: &str,
+        key: &str,
+        data: &PublishData,
+    ) -> Result<(), AmqpError>;
     async fn install_topology(&self, topology: &AmqpTopology) -> Result<(), AmqpError>;
     async fn consume(
         &self,
@@ -63,6 +71,7 @@ pub trait IAmqp {
 pub struct Amqp {
     conn: Connection,
     channel: Channel,
+    tracer: BoxedTracer,
 }
 
 impl Amqp {
@@ -84,7 +93,11 @@ impl Amqp {
             .map_err(|_| AmqpError::ChannelError {})?;
         debug!("channel created");
 
-        Ok(Arc::new(Amqp { conn, channel }))
+        Ok(Arc::new(Amqp {
+            conn,
+            channel,
+            tracer: global::tracer("amqp"),
+        }))
     }
 }
 
@@ -180,13 +193,15 @@ impl IAmqp for Amqp {
             .map_err(|_| AmqpError::BindingConsumerError(tag.to_owned()))
     }
 
-    #[instrument(name = "AMQP PUBLISHING")]
     async fn publish(
         &self,
+        ctx: &Context,
         exchange: &str,
         key: &str,
         data: &PublishData,
     ) -> Result<(), AmqpError> {
+        let cx = otel::tracing::ctx_from_ctx(&self.tracer, ctx, "amqp publishing");
+
         let mut map = BTreeMap::new();
         map.insert(
             ShortString::from("traceparent"),
@@ -208,7 +223,7 @@ impl IAmqp for Amqp {
                     .with_message_id(ShortString::from(Uuid::new_v4().to_string()))
                     .with_headers(FieldTable::from(map)),
             )
-            .instrument(tracing::Span::current())
+            .with_context(cx)
             .await
             .map_err(|_| AmqpError::PublishingError)?;
 
@@ -240,35 +255,39 @@ impl IAmqp for Amqp {
 
         let metadata = Metadata::extract(&header);
 
-        let (_ctx, mut span) = otel::amqp::get_span(metadata.traceparent, "amqp", def.name);
+        let (ctx, mut span) = otel::amqp::get_span(&self.tracer, metadata.traceparent, def.name);
 
-        match handler.exec().instrument(tracing::Span::current()).await {
-            Ok(_) => match delivery.ack(BasicAckOptions { multiple: true }).await {
+        match handler.exec(&ctx).with_context(ctx.clone()).await {
+            Ok(_) => match delivery.ack(BasicAckOptions { multiple: false }).await {
                 Ok(_) => {
                     span.set_status(StatusCode::Ok, "success".to_owned());
+                    return Ok(());
                 }
                 _ => {
                     error!("error whiling ack msg");
                     span.set_status(StatusCode::Error, "error to ack msg".to_owned());
+                    return Err(AmqpError::AckMessageError {});
                 }
             },
             _ if def.with_retry => {
                 warn!("error whiling handling msg, requeuing for latter");
-                if metadata.count < def.retries {
+                if metadata.count <= def.retries {
                     match delivery
                         .nack(BasicNackOptions {
-                            multiple: true,
+                            multiple: false,
                             requeue: false,
                         })
                         .await
                     {
-                        Ok(_) => {}
+                        Ok(_) => return Ok(()),
                         _ => {
                             error!("error whiling requeuing");
                             span.set_status(StatusCode::Error, "error to requeuing msg".to_owned());
+                            return Err(AmqpError::RequeuingMessageError {});
                         }
                     }
                 } else {
+                    error!("too many attempts, sending to dlq");
                     match self
                         .channel
                         .basic_publish(
@@ -280,13 +299,23 @@ impl IAmqp for Amqp {
                         )
                         .await
                     {
-                        Ok(_) => {}
+                        Ok(_) => {
+                            match delivery.ack(BasicAckOptions { multiple: false }).await {
+                                Ok(_) => return Ok(()),
+                                _ => {
+                                    error!("error whiling ack msg to default queue");
+                                    span.set_status(
+                                        StatusCode::Error,
+                                        "msg was sent to dlq".to_owned(),
+                                    );
+                                    return Err(AmqpError::AckMessageError {});
+                                }
+                            };
+                        }
                         _ => {
                             error!("error whiling sending to dlq");
-                            span.set_status(
-                                StatusCode::Error,
-                                "error to sending to dlq".to_owned(),
-                            );
+                            span.set_status(StatusCode::Error, "msg was sent to dlq".to_owned());
+                            return Err(AmqpError::PublishingToDQLError {});
                         }
                     };
                 }
@@ -294,21 +323,20 @@ impl IAmqp for Amqp {
             _ => {
                 match delivery
                     .nack(BasicNackOptions {
-                        multiple: true,
+                        multiple: false,
                         requeue: false,
                     })
                     .await
                 {
-                    Ok(_) => {}
+                    Ok(_) => return Ok(()),
                     _ => {
                         error!("error whiling nack msg");
                         span.set_status(StatusCode::Error, "error to nack msg".to_owned());
+                        return Err(AmqpError::NackMessageError {});
                     }
                 }
             }
         }
-
-        Ok(())
     }
 }
 
@@ -319,7 +347,7 @@ impl Amqp {
         self.channel
             .exchange_declare(
                 exch.name,
-                ExchangeKind::Direct,
+                MyExchangeKind::map(exch.kind.clone()),
                 ExchangeDeclareOptions {
                     auto_delete: false,
                     durable: true,
@@ -497,30 +525,3 @@ impl Amqp {
         format!("{}-dlq-key", queue)
     }
 }
-
-// struct MetadataInjectMap<'a>(&'a mut BTreeMap<ShortString, AMQPValue>);
-// impl<'a> Injector for MetadataInjectMap<'a> {
-//     fn set(&mut self, key: &str, value: String) {
-//         self.0.insert(
-//             ShortString::from(key),
-//             AMQPValue::LongString(LongString::from(value)),
-//         );
-//     }
-// }
-
-// pub struct MetadataExtractMap<'a>(&'a FieldTable);
-// impl<'a> Extractor for MetadataExtractMap<'a> {
-//     fn get(&self, key: &str) -> Option<&str> {
-//         match self.0.inner().get(key) {
-//             Some(v) => match v.as_long_string() {
-//                 Some(s) => Some(Box::leak(s.to_string().into_boxed_str())),
-//                 _ => None,
-//             },
-//             _ => None,
-//         }
-//     }
-
-//     fn keys(&self) -> Vec<&str> {
-//         self.0.inner().keys().map(|k| k.as_str()).collect()
-//     }
-// }

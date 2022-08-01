@@ -25,4 +25,16 @@ pub enum AmqpError {
 
     #[error("failure to parse payload")]
     ParsePayloadError,
+
+    #[error("failure to ack message")]
+    AckMessageError,
+
+    #[error("failure to nack message")]
+    NackMessageError,
+
+    #[error("failure to requeuing message")]
+    RequeuingMessageError,
+
+    #[error("failure to publish to dlq")]
+    PublishingToDQLError,
 }
