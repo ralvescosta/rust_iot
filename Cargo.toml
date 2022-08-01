@@ -8,8 +8,9 @@ members = [
     "s.grpc",
     "s.http",
     "s.mqtt",
-    "s.dummy"
+    "s.dummy",
+    "s.dump"
 ]
 
 
-default-members = ["s.amqp", "s.mqtt", "s.grpc", "s.http", "s.dummy", "infra"]
+default-members = ["s.amqp", "s.mqtt", "s.grpc", "s.http", "s.dummy", "s.dump", "infra"]
