@@ -6,7 +6,7 @@
 
 This project was built to understand the maturity of the RustLag ecosystem for the most common IoT Tools, such as: MQTT and RabbitMQ. In this project was build a simples example which receive sames messages through MQTT 3.1.1, republish those messages to RabbitMQ and handle the RabbitMQ events to save this data, and also was created a HTTP and gRPC interface to get the information that has been saved. Was created four binary mqtt, rabbitmq, grpc and http which for the respective protocol.
 
-Also in this project we take care about some well-known practices to web development like: Unit tests, Environment variables, Logging, Tracing, Containerization and so on.
+Also in this project we take care about some well-known practices to web development like: Unit tests, Environment variables, Logging, Tracing and Metrics with Opentelemetry, Containerization and so on.
 
 - **MQTT binary**
 
