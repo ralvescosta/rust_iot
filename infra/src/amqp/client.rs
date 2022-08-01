@@ -527,3 +527,11 @@ impl Amqp {
         format!("{}-dlq-key", queue)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    // use super::*;
+
+    #[test]
+    fn test_consume_successfully() {}
+}
