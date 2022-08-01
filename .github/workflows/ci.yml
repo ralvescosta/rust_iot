@@ -17,12 +17,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
 
     - name: Install tools
       run: |
         cargo install cargo-tarpaulin
-        apt install -y protobuf-compiler
 
     - name: Build
       run: cargo build --verbose
