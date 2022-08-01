@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     "",
                 )),
         )
-        .arc();
+        .boxed();
 
     amqp.clone().install_topology(&topology).await?;
 

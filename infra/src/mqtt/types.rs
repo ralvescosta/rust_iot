@@ -24,7 +24,7 @@ pub enum MetadataKind {
 
 impl Display for MetadataKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{}", self.to_string())
     }
 }
 
@@ -36,7 +36,7 @@ pub struct MessageMetadata {
 
 impl Display for MessageMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)
+        write!(f, "{}", self.kind.to_string())
     }
 }
 
