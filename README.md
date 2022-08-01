@@ -13,10 +13,66 @@ Also in this project we take care about some well-known practices to web develop
   - For MQTT the project has been used the [rumqttc](https://crates.io/crates/rumqttc) create, this create seen good offering a async client based in Tokio.
   - The main ideia for the s.mqtt binary is that receive the IoT data and delivery these data to a RabbitMQ exchange
 
-- **RabbitMQ binary**
+- **AMQP Binaries**
 
   - For HTTP the project has been used [lapin](https://crates.io/crates/lapin) create.
-  - The main ideia for the s.amqp binary is that receive the IoT from a queue and save these data into PostgreSQL
+
+  - **amqp binary:**
+
+    - The main ideia for the s.amqp binary is that receive the IoT do some works and "notify" the other services about the IoT data.
+
+  - **dummy binary:**
+
+    - The main ideia for the s.dummy binary is that receive the IoT notification and do some works.
+  
+  - **dump binary:**
+
+    - The main ideia for the s.dump binary is that receive the IoT notification and do some works.
+
+## How can I build the binaries?
+
+Make sure you have the following pre-requirements:
+
+  - rustup@lts
+  - rustc@lts
+  - cargo@lts
+  - protoc@lts
+
+- **To build the MQTT Binary**
+
+  ```bash
+  cargo build --binary mqtt
+  ```
+
+- **To build the AMQP Binaries**
+
+  - **amqp**
+
+  ```bash
+  cargo build --binary amqp
+  ```
+
+  - **dummy**
+
+  ```bash
+  cargo build --binary dummy
+  ```
+
+  - **dump**
+
+  ```bash
+  cargo build --binary dump
+  ```
+
+## How can I run the project?
+
+Make sure you have the following pre-requirements:
+
+  - docker-ce@lts
+  - minikube@lts
+  - kubectl@lts
+
+## Future features
 
 - **HTTP binary**
 
@@ -28,47 +84,16 @@ Also in this project we take care about some well-known practices to web develop
   - For gRPC the project has been used [tonic](https://crates.io/crates/tonic) create.
   - The main ideia for the s.grpc binary is that get the data that has been saved in PostgreSQL and return using proto buffer.
 
-## How can I build the binaries?
+## Conclusions:
 
-Make sure you have the following pre-requirements:
+- **Opentelemetry + Newrelic:**
 
-  - rustup@lts
-  - rustc@lts
-  - cargo@lts
-  - protoc@lts
+<p align="center">
+ <img src="./.docs/otel.png" alt="newrelic-opentelemetry"/> 
+</p>
+
+## Commands:
 
 - cargo install protobuf-codegen
 - cargo install grpcio-compiler
 - apt install -y protobuf-compiler
-
-- **To build the MQTT Binary**
-
-  ```bash
-  cargo build --binary mqtt
-  ```
-
-- **To build the AMQP Binary**
-
-  ```bash
-  cargo build --binary mqtt
-  ```
-
-- **To build the HTTP Binary**
-
-  ```bash
-  cargo build --binary http
-  ```
-
-- **To build the gRPC Binary**
-
-  ```bash
-  cargo build --binary grpc
-  ```
-
-## How can I run the project?
-
-Make sure you have the following pre-requirements:
-
-  - docker-ce@lts
-  - minikube@lts
-  - kubectl@lts
