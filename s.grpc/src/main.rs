@@ -1,11 +1,10 @@
+mod protos;
+
+use protos::helloworld::{
+    greeter_server::{Greeter, GreeterServer},
+    HelloReply, HelloRequest,
+};
 use tonic::{transport::Server, Request, Response, Status};
-
-use hello_world::greeter_server::{Greeter, GreeterServer};
-use hello_world::{HelloReply, HelloRequest};
-
-pub mod hello_world {
-    tonic::include_proto!("helloworld"); // The string specified here must match the proto package name
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,8 +32,9 @@ impl Greeter for MyGreeter {
         // Return an instance of type HelloReply
         println!("Got a request: {:?}", request);
 
-        let reply = hello_world::HelloReply {
+        let reply = HelloReply {
             message: format!("Hello {}!", request.into_inner().name).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
+            ..Default::default()
         };
 
         Ok(Response::new(reply)) // Send back our formatted greeting

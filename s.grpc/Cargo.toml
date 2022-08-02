@@ -1,13 +1,12 @@
 [package]
-name = "grpc"
+name = "ggrpc"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 tonic = { version = "0.8.0" }
 prost = { version = "0.11.0" }
-tokio = { versin = "1.7.0", features = ["macros", "rt-multi-thread"] }
-
+tokio = { versin = "1.7.0", features = ["full"] }
 
 [build-dependencies]
 tonic-build = { version = "0.8.0" }

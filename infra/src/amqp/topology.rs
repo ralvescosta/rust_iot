@@ -212,8 +212,6 @@ impl AmqpTopology {
 
 #[cfg(test)]
 mod tests {
-    use lapin::topology;
-
     use super::*;
 
     #[test]

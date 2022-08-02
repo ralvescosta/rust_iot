@@ -67,3 +67,59 @@ impl PublishData {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::*;
+    use lapin::types::{AMQPValue, FieldArray, FieldTable, LongLongInt, LongString, ShortString};
+
+    #[test]
+    fn test_metadata_extract_successfully() {
+        let mut count = BTreeMap::new();
+        count.insert(ShortString::from("count"), AMQPValue::LongLongInt(10));
+
+        let mut metadata = BTreeMap::new();
+        metadata.insert(
+            ShortString::from("x-death"),
+            AMQPValue::FieldArray(FieldArray::from(vec![AMQPValue::FieldTable(
+                FieldTable::from(count),
+            )])),
+        );
+
+        metadata.insert(
+            ShortString::from("traceparent"),
+            AMQPValue::LongString(LongString::from("traceparent")),
+        );
+
+        let re = Metadata::extract(&FieldTable::from(metadata));
+        assert_eq!(re.count, 10);
+        assert_eq!(re.traceparent, "traceparent");
+    }
+
+    #[test]
+    fn test_metadata_extract_wrong() {
+        let mut metadata = BTreeMap::new();
+
+        let re = Metadata::extract(&FieldTable::from(metadata.clone()));
+        assert_eq!(re.count, 0);
+        assert_eq!(re.traceparent, "");
+
+        let mut count = BTreeMap::new();
+        count.insert(ShortString::from("c"), AMQPValue::LongLongInt(10));
+        metadata.insert(
+            ShortString::from("x-death"),
+            AMQPValue::FieldArray(FieldArray::from(vec![AMQPValue::FieldTable(
+                FieldTable::from(count),
+            )])),
+        );
+        metadata.insert(
+            ShortString::from("traceparent"),
+            AMQPValue::LongLongInt(LongLongInt::from(10)),
+        );
+        let re = Metadata::extract(&FieldTable::from(metadata.clone()));
+        assert_eq!(re.count, 0);
+        assert_eq!(re.traceparent, "");
+    }
+}
