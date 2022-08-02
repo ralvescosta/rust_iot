@@ -1,4 +1,8 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::compile_protos("proto/helloworld.proto")?;
-    Ok(())
+fn main() {
+    protoc_rust_grpc::Codegen::new()
+        .out_dir("./src/protos")
+        .input("./protos/helloworld.proto")
+        .rust_protobuf(true)
+        .run()
+        .expect("error compiling protocol buffer");
 }
