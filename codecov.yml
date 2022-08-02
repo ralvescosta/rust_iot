@@ -1,2 +1,3 @@
 ignore:
     - "**/main.rs"
+    - "**/build.rs"

@@ -2,7 +2,7 @@
 
 - **Requirements:**
 
-  - apt install -y protobuf-compiler
+  - apt install -y protobuf-compiler@v2.26
    
   - config cargo/bins in your HOME
 

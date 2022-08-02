@@ -1,8 +1,10 @@
-use tonic::{transport::Server, Request, Response, Status};
 mod protos;
 
-use protos::helloworld::{HelloReply, HelloRequest};
-use protos::helloworld_grpc::{Greeter, GreeterServer};
+use protos::helloworld::{
+    greeter_server::{Greeter, GreeterServer},
+    HelloReply, HelloRequest,
+};
+use tonic::{transport::Server, Request, Response, Status};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
