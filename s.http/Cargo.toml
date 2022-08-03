@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 actix-web = { version = "4.1.0" }
+actix-cors = { version = "0.6.1" }
 serde = { version = "1.0.140", features = ["derive"] }
 serde_json = { version = "1.0.82" }
 json = { version = "0.12.4" }
+thiserror = { version = "1.0.31" }
