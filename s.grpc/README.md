@@ -2,11 +2,10 @@
 
 - **Requirements:**
 
-  - apt install -y protobuf-compiler@v2.26
+  - apt install -y protobuf-compiler
    
-  - config cargo/bins in your HOME
+  - config cargo/bins in your HOME:
+  
+    - export PATH=$PATH:$HOME/$USER/.asdf/installs/rust/1.62.0/bin/
 
   - cargo install protobuf-codegen
-
-
-protoc --rust_out ./src/protos protos/helloworld.proto
