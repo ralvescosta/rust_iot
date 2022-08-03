@@ -1,14 +1,7 @@
 use std::{env, path::PathBuf};
 
 fn main() {
-    // protoc_rust_grpc::Codegen::new()
-    //     .out_dir("./src/protos")
-    //     .input("./protos/helloworld.proto")
-    //     .rust_protobuf(true)
-    //     .run()
-    //     .expect("error compiling protocol buffer");
-
-    let proto_file = "./protos/helloworld.proto";
+    let proto_file = "./protos/iot.proto";
 
     tonic_build::configure()
         .build_server(true)

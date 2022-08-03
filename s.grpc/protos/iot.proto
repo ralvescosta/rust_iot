@@ -1,0 +1,18 @@
+syntax = "proto3";
+package iot;
+
+message GetIoTDataRequest {
+    string name = 1;
+}
+
+message IoTDataMessage {
+    int64 time = 1;
+}
+
+message GetIoTDataResponse {
+    repeated IoTDataMessage data = 1;
+}
+
+service IotData {
+    rpc GetIoTData (GetIoTDataRequest) returns (GetIoTDataResponse);
+}

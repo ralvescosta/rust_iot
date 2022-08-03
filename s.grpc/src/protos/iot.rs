@@ -1,25 +1,28 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct HelloRequest {
-    ///  Request message contains the name to be greeted
+pub struct GetIoTDataRequest {
     #[prost(string, tag="1")]
     pub name: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
-pub struct HelloReply {
-    ///  Reply contains the greeting message
-    #[prost(string, tag="1")]
-    pub message: ::prost::alloc::string::String,
+pub struct IoTDataMessage {
+    #[prost(int64, tag="1")]
+    pub time: i64,
+}
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct GetIoTDataResponse {
+    #[prost(message, repeated, tag="1")]
+    pub data: ::prost::alloc::vec::Vec<IoTDataMessage>,
 }
 /// Generated client implementations.
-pub mod greeter_client {
+pub mod iot_data_client {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     use tonic::codegen::http::Uri;
     #[derive(Debug, Clone)]
-    pub struct GreeterClient<T> {
+    pub struct IotDataClient<T> {
         inner: tonic::client::Grpc<T>,
     }
-    impl GreeterClient<tonic::transport::Channel> {
+    impl IotDataClient<tonic::transport::Channel> {
         /// Attempt to create a new client by connecting to a given endpoint.
         pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
         where
@@ -30,7 +33,7 @@ pub mod greeter_client {
             Ok(Self::new(conn))
         }
     }
-    impl<T> GreeterClient<T>
+    impl<T> IotDataClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
         T::Error: Into<StdError>,
@@ -48,7 +51,7 @@ pub mod greeter_client {
         pub fn with_interceptor<F>(
             inner: T,
             interceptor: F,
-        ) -> GreeterClient<InterceptedService<T, F>>
+        ) -> IotDataClient<InterceptedService<T, F>>
         where
             F: tonic::service::Interceptor,
             T::ResponseBody: Default,
@@ -62,7 +65,7 @@ pub mod greeter_client {
                 http::Request<tonic::body::BoxBody>,
             >>::Error: Into<StdError> + Send + Sync,
         {
-            GreeterClient::new(InterceptedService::new(inner, interceptor))
+            IotDataClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
         ///
@@ -79,11 +82,10 @@ pub mod greeter_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
-        /// Our SayHello rpc accepts HelloRequests and returns HelloReplies
-        pub async fn say_hello(
+        pub async fn get_io_t_data(
             &mut self,
-            request: impl tonic::IntoRequest<super::HelloRequest>,
-        ) -> Result<tonic::Response<super::HelloReply>, tonic::Status> {
+            request: impl tonic::IntoRequest<super::GetIoTDataRequest>,
+        ) -> Result<tonic::Response<super::GetIoTDataResponse>, tonic::Status> {
             self.inner
                 .ready()
                 .await
@@ -94,34 +96,31 @@ pub mod greeter_client {
                     )
                 })?;
             let codec = tonic::codec::ProstCodec::default();
-            let path = http::uri::PathAndQuery::from_static(
-                "/helloworld.Greeter/SayHello",
-            );
+            let path = http::uri::PathAndQuery::from_static("/iot.IotData/GetIoTData");
             self.inner.unary(request.into_request(), path, codec).await
         }
     }
 }
 /// Generated server implementations.
-pub mod greeter_server {
+pub mod iot_data_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    ///Generated trait containing gRPC methods that should be implemented for use with GreeterServer.
+    ///Generated trait containing gRPC methods that should be implemented for use with IotDataServer.
     #[async_trait]
-    pub trait Greeter: Send + Sync + 'static {
-        /// Our SayHello rpc accepts HelloRequests and returns HelloReplies
-        async fn say_hello(
+    pub trait IotData: Send + Sync + 'static {
+        async fn get_io_t_data(
             &self,
-            request: tonic::Request<super::HelloRequest>,
-        ) -> Result<tonic::Response<super::HelloReply>, tonic::Status>;
+            request: tonic::Request<super::GetIoTDataRequest>,
+        ) -> Result<tonic::Response<super::GetIoTDataResponse>, tonic::Status>;
     }
     #[derive(Debug)]
-    pub struct GreeterServer<T: Greeter> {
+    pub struct IotDataServer<T: IotData> {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
     }
     struct _Inner<T>(Arc<T>);
-    impl<T: Greeter> GreeterServer<T> {
+    impl<T: IotData> IotDataServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -155,9 +154,9 @@ pub mod greeter_server {
             self
         }
     }
-    impl<T, B> tonic::codegen::Service<http::Request<B>> for GreeterServer<T>
+    impl<T, B> tonic::codegen::Service<http::Request<B>> for IotDataServer<T>
     where
-        T: Greeter,
+        T: IotData,
         B: Body + Send + 'static,
         B::Error: Into<StdError> + Send + 'static,
     {
@@ -173,22 +172,26 @@ pub mod greeter_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/helloworld.Greeter/SayHello" => {
+                "/iot.IotData/GetIoTData" => {
                     #[allow(non_camel_case_types)]
-                    struct SayHelloSvc<T: Greeter>(pub Arc<T>);
-                    impl<T: Greeter> tonic::server::UnaryService<super::HelloRequest>
-                    for SayHelloSvc<T> {
-                        type Response = super::HelloReply;
+                    struct GetIoTDataSvc<T: IotData>(pub Arc<T>);
+                    impl<
+                        T: IotData,
+                    > tonic::server::UnaryService<super::GetIoTDataRequest>
+                    for GetIoTDataSvc<T> {
+                        type Response = super::GetIoTDataResponse;
                         type Future = BoxFuture<
                             tonic::Response<Self::Response>,
                             tonic::Status,
                         >;
                         fn call(
                             &mut self,
-                            request: tonic::Request<super::HelloRequest>,
+                            request: tonic::Request<super::GetIoTDataRequest>,
                         ) -> Self::Future {
                             let inner = self.0.clone();
-                            let fut = async move { (*inner).say_hello(request).await };
+                            let fut = async move {
+                                (*inner).get_io_t_data(request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -197,7 +200,7 @@ pub mod greeter_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
-                        let method = SayHelloSvc(inner);
+                        let method = GetIoTDataSvc(inner);
                         let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
@@ -224,7 +227,7 @@ pub mod greeter_server {
             }
         }
     }
-    impl<T: Greeter> Clone for GreeterServer<T> {
+    impl<T: IotData> Clone for IotDataServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -234,7 +237,7 @@ pub mod greeter_server {
             }
         }
     }
-    impl<T: Greeter> Clone for _Inner<T> {
+    impl<T: IotData> Clone for _Inner<T> {
         fn clone(&self) -> Self {
             Self(self.0.clone())
         }
@@ -244,7 +247,7 @@ pub mod greeter_server {
             write!(f, "{:?}", self.0)
         }
     }
-    impl<T: Greeter> tonic::server::NamedService for GreeterServer<T> {
-        const NAME: &'static str = "helloworld.Greeter";
+    impl<T: IotData> tonic::server::NamedService for IotDataServer<T> {
+        const NAME: &'static str = "iot.IotData";
     }
 }
