@@ -9,7 +9,7 @@ pub struct SomethingConsumer {
 
 #[async_trait]
 impl ConsumerHandler for SomethingConsumer {
-    async fn exec(&self, _ctx: &Context) -> Result<(), AmqpError> {
+    async fn exec(&self, _ctx: &Context, _data: &[u8]) -> Result<(), AmqpError> {
         println!("{}", self.msg);
 
         Ok(())

@@ -26,12 +26,12 @@ impl Controller for IoTController {
         &self,
         ctx: &Context,
         _meta: &MessageMetadata,
-        _msg: &Message,
+        msg: &Message,
     ) -> Result<(), MqttError> {
         info!("IoTController");
 
         self.service
-            .delivery(ctx, 10)
+            .delivery(ctx, msg)
             .await
             .map_err(|_| MqttError::InternalError {})?;
 

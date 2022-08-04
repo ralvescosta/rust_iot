@@ -68,13 +68,13 @@ impl MessageMetadata {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TempMessage {
     pub temp: f32,
     pub time: u64,
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum Message {
     Temp(TempMessage),
 }

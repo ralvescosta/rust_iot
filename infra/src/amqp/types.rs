@@ -1,9 +1,11 @@
 use crate::errors::AmqpError;
 use lapin::types::FieldTable;
 use serde::Serialize;
+use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct Metadata {
+    pub msg_type: String,
     pub count: i64,
     pub traceparent: String,
 }
@@ -30,6 +32,14 @@ impl Metadata {
             _ => 0,
         };
 
+        let msg_type = match header.inner().get("type") {
+            Some(value) => match value.as_long_string() {
+                Some(st) => st.to_string(),
+                _ => "".to_owned(),
+            },
+            _ => "".to_owned(),
+        };
+
         let traceparent = match header.inner().get("traceparent") {
             Some(value) => match value.as_long_string() {
                 Some(st) => st.to_string(),
@@ -38,12 +48,30 @@ impl Metadata {
             _ => "".to_owned(),
         };
 
-        Metadata { count, traceparent }
+        Metadata {
+            msg_type,
+            count,
+            traceparent,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum AmqpMessageType {
+    #[default]
+    MQTTMsg,
+    Temp,
+    GPS,
+}
+
+impl Display for AmqpMessageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
 pub trait PublishPayload {
-    fn get_type(&self) -> String;
+    fn get_type(&self) -> AmqpMessageType;
 }
 
 #[derive(Debug, Clone)]
@@ -62,7 +90,7 @@ impl PublishData {
             .into_boxed_slice();
 
         Ok(PublishData {
-            msg_type: payload.get_type(),
+            msg_type: payload.get_type().to_string(),
             payload: serialized,
         })
     }
@@ -93,9 +121,15 @@ mod tests {
             AMQPValue::LongString(LongString::from("traceparent")),
         );
 
+        metadata.insert(
+            ShortString::from("type"),
+            AMQPValue::LongString(LongString::from("msg_type")),
+        );
+
         let re = Metadata::extract(&FieldTable::from(metadata));
         assert_eq!(re.count, 10);
         assert_eq!(re.traceparent, "traceparent");
+        assert_eq!(re.msg_type, "msg_type");
     }
 
     #[test]
@@ -116,6 +150,10 @@ mod tests {
         );
         metadata.insert(
             ShortString::from("traceparent"),
+            AMQPValue::LongLongInt(LongLongInt::from(10)),
+        );
+        metadata.insert(
+            ShortString::from("type"),
             AMQPValue::LongLongInt(LongLongInt::from(10)),
         );
         let re = Metadata::extract(&FieldTable::from(metadata.clone()));

@@ -257,9 +257,33 @@ impl IAmqp for Amqp {
 
         let metadata = Metadata::extract(&header);
 
+        debug!(
+            "queue: {} - consumer: {} - received message: {}",
+            def.name, def.queue, metadata.msg_type
+        );
+
         let (ctx, mut span) = otel::amqp::get_span(&self.tracer, metadata.traceparent, def.name);
 
-        match handler.exec(&ctx).with_context(ctx.clone()).await {
+        if !metadata.msg_type.is_empty() && metadata.msg_type != def.msg_type.to_string() {
+            debug!("message type dos not match, skipping msg");
+            match delivery
+                .nack(BasicNackOptions {
+                    multiple: false,
+                    requeue: true,
+                })
+                .await
+            {
+                Ok(_) => {}
+                _ => error!("error whiling ack msg"),
+            };
+            return Ok(());
+        }
+
+        match handler
+            .exec(&ctx, delivery.data.as_slice())
+            .with_context(ctx.clone())
+            .await
+        {
             Ok(_) => match delivery.ack(BasicAckOptions { multiple: false }).await {
                 Ok(_) => {
                     span.set_status(StatusCode::Ok, "success".to_owned());
@@ -297,7 +321,7 @@ impl IAmqp for Amqp {
                             def.dlq_name,
                             BasicPublishOptions::default(),
                             &delivery.data,
-                            BasicProperties::default(),
+                            delivery.properties.clone(),
                         )
                         .await
                     {

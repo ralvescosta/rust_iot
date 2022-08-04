@@ -2,6 +2,8 @@ use crate::errors::AmqpError;
 use async_trait::async_trait;
 use opentelemetry::Context;
 
+use super::types::AmqpMessageType;
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct QueueBindingDefinition {
     pub exchange: &'static str,
@@ -22,6 +24,7 @@ impl QueueBindingDefinition {
 #[derive(Debug, Clone, Default)]
 pub struct QueueDefinition {
     pub name: &'static str,
+    pub msg_type: AmqpMessageType,
     pub bindings: Vec<QueueBindingDefinition>,
     pub with_dlq: bool,
     pub dlq_name: &'static str,
@@ -36,6 +39,11 @@ impl QueueDefinition {
             name,
             ..Default::default()
         }
+    }
+
+    pub fn msg_type(mut self, msg_type: AmqpMessageType) -> Self {
+        self.msg_type = msg_type;
+        self
     }
 
     pub fn with_dlq(mut self) -> Self {
@@ -118,13 +126,14 @@ impl ExchangeDefinition {
 
 #[async_trait]
 pub trait ConsumerHandler {
-    async fn exec(&self, ctx: &Context) -> Result<(), AmqpError>;
+    async fn exec(&self, ctx: &Context, data: &[u8]) -> Result<(), AmqpError>;
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ConsumerDefinition {
     pub name: &'static str,
     pub queue: &'static str,
+    pub msg_type: AmqpMessageType,
     pub with_retry: bool,
     pub retries: i64,
     pub with_dlq: bool,
@@ -135,16 +144,18 @@ impl ConsumerDefinition {
     pub fn name(name: &'static str) -> ConsumerDefinition {
         ConsumerDefinition {
             name,
-            queue: "",
             retries: 1,
-            with_retry: false,
-            with_dlq: false,
-            dlq_name: "",
+            ..Default::default()
         }
     }
 
     pub fn queue(mut self, queue: &'static str) -> Self {
         self.queue = queue;
+        self
+    }
+
+    pub fn msg_type(mut self, msg_type: AmqpMessageType) -> Self {
+        self.msg_type = msg_type;
         self
     }
 
@@ -199,6 +210,7 @@ impl AmqpTopology {
                 return Some(ConsumerDefinition {
                     name: queue.name,
                     queue: queue.name,
+                    msg_type: queue.msg_type,
                     retries,
                     with_dlq: queue.with_dlq,
                     dlq_name: queue.dlq_name,
