@@ -40,17 +40,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     amqp.clone().install_topology(&topology).await?;
 
+    let pool = Box::new(
+        PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&cfg.pg_uri())
+            .await?,
+    );
+
     let def = topology.get_consumers_def("queue_top_test1").unwrap();
     let mut consumer = amqp.consumer(def.queue, def.queue).await?;
     let spawn_iot = tokio::spawn({
         let cloned = amqp.clone();
 
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect(&cfg.pg_uri())
-            .await?;
-
-        let repo = IoTRepositoryImpl::new(pool);
+        let repo = IoTRepositoryImpl::new(Box::leak(pool));
         let service = ConsumeIoTMessageServiceImpl::new(repo, amqp.clone());
         let handler = IoTConsumer::new(service);
 

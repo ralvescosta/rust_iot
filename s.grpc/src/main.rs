@@ -1,5 +1,7 @@
 mod services;
 
+use std::sync::Arc;
+
 use app::ExampleServiceImpl;
 use infra::{env::Config, repositories::iot_repository::IoTRepositoryImpl};
 use protos::iot::iot_data_server::IotDataServer;
@@ -12,12 +14,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse()?;
     let cfg = Config::new();
 
-    let pool = PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&cfg.pg_uri())
-        .await?;
+    let pool = Box::new(
+        PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&cfg.pg_uri())
+            .await?,
+    );
 
-    let repository = IoTRepositoryImpl::new(pool);
+    let repository = IoTRepositoryImpl::new(Box::leak(pool));
     let service = ExampleServiceImpl::new(repository);
     let iot_service = iot::IoTGrpcService::new(service);
 
