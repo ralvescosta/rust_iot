@@ -1,7 +1,10 @@
 use async_trait::async_trait;
-use infra::amqp::{
-    client::IAmqp,
-    types::{PublishData, PublishPayload},
+use infra::{
+    amqp::{
+        client::IAmqp,
+        types::{AmqpMessageType, PublishData, PublishPayload},
+    },
+    mqtt::types::{Message, TempMessage},
 };
 use log::info;
 use opentelemetry::Context;
@@ -10,7 +13,7 @@ use std::{error::Error, sync::Arc};
 
 #[async_trait]
 pub trait DeliveryIoTMessageService {
-    async fn delivery(&self, ctx: &Context, data: u8) -> Result<(), Box<dyn Error>>;
+    async fn delivery(&self, ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>>;
 }
 
 #[derive(Clone)]
@@ -32,22 +35,36 @@ impl DeliveryIoTMessageServiceImpl {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct SendToAmqp {}
+#[derive(Debug, Default, Serialize, Deserialize)]
+struct AmqpTempMessage {
+    pub temp: f32,
+    pub time: u64,
+}
 
-impl PublishPayload for SendToAmqp {
-    fn get_type(&self) -> String {
-        "SendToAmqp".to_owned()
+impl PublishPayload for AmqpTempMessage {
+    fn get_type(&self) -> AmqpMessageType {
+        AmqpMessageType::Temp
+    }
+}
+
+impl AmqpTempMessage {
+    pub fn new(msg: &TempMessage) -> Result<PublishData, ()> {
+        PublishData::new(AmqpTempMessage {
+            temp: msg.temp,
+            time: msg.time,
+        })
+        .map_err(|_| ())
     }
 }
 
 #[async_trait]
 impl DeliveryIoTMessageService for DeliveryIoTMessageServiceImpl {
-    async fn delivery(&self, ctx: &Context, _data: u8) -> Result<(), Box<dyn Error>> {
+    async fn delivery(&self, ctx: &Context, msg: &Message) -> Result<(), Box<dyn Error>> {
         info!("MQTT::IDeliveryIoTMessageService");
 
-        let payload = SendToAmqp {};
-        let data = PublishData::new(payload).unwrap();
+        let payload = match msg {
+            Message::Temp(temp) => AmqpTempMessage::new(temp),
+        };
 
         match self
             .amqp
@@ -55,7 +72,7 @@ impl DeliveryIoTMessageService for DeliveryIoTMessageServiceImpl {
                 ctx,
                 "exchange_top_test1",
                 "exchange_top_test1_queue_top_test1",
-                &data,
+                &payload.unwrap(),
             )
             .await
         {

@@ -10,11 +10,14 @@ pub struct IoTConsumer {
 
 #[async_trait]
 impl ConsumerHandler for IoTConsumer {
-    async fn exec(&self, ctx: &Context) -> Result<(), AmqpError> {
+    async fn exec(&self, ctx: &Context, data: &[u8]) -> Result<(), AmqpError> {
         println!("Consumer");
 
+        // let msg =
+        //     serde_json::from_slice::<Message>(data).map_err(|_| AmqpError::ParsePayloadError {})?;
+
         self.service
-            .consume(ctx)
+            .consume(ctx, data)
             .await
             .map_err(|_| AmqpError::PublishingError)?;
 

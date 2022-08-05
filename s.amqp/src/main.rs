@@ -11,6 +11,7 @@ use infra::{
     repositories::iot_repository::IoTRepositoryImpl,
 };
 use log::error;
+use sqlx::postgres::PgPoolOptions;
 use std::error::Error;
 
 #[tokio::main]
@@ -43,7 +44,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut consumer = amqp.consumer(def.queue, def.queue).await?;
     let spawn_iot = tokio::spawn({
         let cloned = amqp.clone();
-        let repo = IoTRepositoryImpl::new();
+
+        let pool = PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&cfg.pg_uri())
+            .await?;
+
+        let repo = IoTRepositoryImpl::new(pool);
         let service = ConsumeIoTMessageServiceImpl::new(repo, amqp.clone());
         let handler = IoTConsumer::new(service);
 

@@ -1,4 +1,4 @@
 ignore:
     - "**/main.rs"
     - "**/build.rs"
-    - "**/protos/*.rs"
+    - "./s.proto/**"

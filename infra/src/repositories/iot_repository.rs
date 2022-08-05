@@ -5,16 +5,19 @@ use opentelemetry::{
     trace::FutureExt,
     Context,
 };
+use sqlx::{Pool, Postgres};
 use std::{sync::Arc, time::Duration};
 
 #[async_trait]
 pub trait IoTRepository {
     async fn get(&self, ctx: &Context) -> Result<(), RepositoriesError>;
     async fn save(&self, ctx: &Context) -> Result<(), RepositoriesError>;
+    async fn find(&self, ctx: &Context) -> Result<(), RepositoriesError>;
 }
 
 pub struct IoTRepositoryImpl {
     tracer: BoxedTracer,
+    pool: Pool<Postgres>,
 }
 
 #[async_trait]
@@ -37,12 +40,25 @@ impl IoTRepository for IoTRepositoryImpl {
 
         Ok(())
     }
+
+    async fn find(&self, ctx: &Context) -> Result<(), RepositoriesError> {
+        let cx = otel::tracing::ctx_from_ctx(&self.tracer, ctx, "sql find");
+
+        sqlx::query("SELECT * FROM iot")
+            .execute(&self.pool)
+            .with_context(cx)
+            .await
+            .map_err(|_| RepositoriesError::InternalError {})?;
+
+        Ok(())
+    }
 }
 
 impl IoTRepositoryImpl {
-    pub fn new() -> Arc<dyn IoTRepository + Send + Sync> {
+    pub fn new(pool: Pool<Postgres>) -> Arc<dyn IoTRepository + Send + Sync> {
         Arc::new(IoTRepositoryImpl {
-            tracer: global::tracer("repository"),
+            tracer: global::tracer("iot_repository"),
+            pool,
         })
     }
 }
