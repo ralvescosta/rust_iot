@@ -4,7 +4,6 @@ use infra::{
         client::IAmqp,
         types::{AmqpMessageType, PublishData, PublishPayload},
     },
-    mqtt::types::Message,
     repositories::iot_repository::IoTRepository,
 };
 use opentelemetry::Context;

@@ -15,7 +15,7 @@ use lapin::{
     },
     protocol::basic::AMQPProperties,
     types::{AMQPValue, FieldTable, LongInt, LongString, ShortString},
-    BasicProperties, Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
+    Channel, Connection, ConnectionProperties, Consumer, ExchangeKind, Queue,
 };
 use log::{debug, error, warn};
 use opentelemetry::{
