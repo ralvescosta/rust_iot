@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: conf
+data:
+  mosquitto.conf:  |
+    listener 1883
+
+    persistence true
+    persistence_location /mosquitto/data/
+
+    log_dest file /mosquitto/log/mosquitto.log
+    log_dest stdout
+
+    allow_anonymous false
+    password_file /mosquitto/auth/password_file.txt
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: passwd
+data:
+  password_file.txt: |
+    mqtt_user:password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt-broker
+  labels:
+    app: mqtt-broker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mqtt-broker
+  template:
+    metadata:
+      labels:
+        app: mqtt-broker
+    spec:
+      volumes:
+        - name: broker-conf
+          configMap:
+            name: conf
+        - name: broker-passwd
+          configMap:
+            name: passwd
+        - name: mosquitto-data
+          emptyDir: {}
+        - name: mosquitto-log
+          emptyDir: {}
+      # securityContext:
+      #   runAsNonRoot: true
+      #   fsGroup: 1
+      #   runAsGroup: 1000
+      #   runAsUser: 1000
+      #   supplementalGroups:
+      #   - 1   
+      containers:
+        - name: mqtt-broker
+          image: eclipse-mosquitto
+          ports:
+            - containerPort: 1883
+          resources:
+            requests:
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+          command: ["/bin/sh", "-c"]
+          args:
+            - mosquitto_passwd -U /mosquitto/auth/password_file.txt;
+              /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf;
+              echo mosquitto configured;
+          volumeMounts:
+            - name: broker-passwd
+              mountPath: /mosquitto/auth/password_file.txt
+              subPath: password_file.txt
+
+            - name: mosquitto-data
+              mountPath: /mosquitto/data
+
+            - name: mosquitto-log
+              mountPath: /mosquitto/log
+
+            - name: broker-conf
+              mountPath: /mosquitto/config/mosquitto.conf
+              subPath: mosquitto.conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto-svc
+  labels:
+    app: mqtt-broker
+spec:
+  type: NodePort
+  ports:
+  - port: 1883
+    nodePort: 30001
+    targetPort: 1883
+    protocol: TCP
+  selector:
+    app: mqtt-broker

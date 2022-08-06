@@ -6,4 +6,4 @@ RUN cargo install --path ./s.grpc
 FROM scratch
 COPY --from=builder /usr/local/cargo/bin/grpc /usr/local/bin/grpc
 USER scratchuser
-CMD ["grpc"]
+CMD ["ggrpc"]

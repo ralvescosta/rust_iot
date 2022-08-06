@@ -6,4 +6,4 @@ RUN cargo install --path ./s.http
 FROM scratch
 COPY --from=builder /usr/local/cargo/bin/http /usr/local/bin/http
 USER scratchuser
-CMD ["http"]
+CMD ["hhttp"]

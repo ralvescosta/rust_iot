@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt-bridge-deployment
+  labels:
+    app: mqtt-bridge
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mqtt-bridge
+  templates:
+    metadata:
+      labels:
+        app: mqtt-bridge
+    spec:
+      containers:
+      - name: mqtt-bridge
+        image: ralvescosta/mqtt-bridges
