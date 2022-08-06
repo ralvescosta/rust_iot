@@ -4,7 +4,7 @@
 
 :warning::construction: **Work In Progress** :construction::warning:
 
-This project was built to understand the maturity of the RustLag ecosystem for the most common IoT Tools, such as: MQTT and RabbitMQ. In this project was build a simples example which receive sames messages through MQTT 3.1.1, republish those messages to RabbitMQ and handle the RabbitMQ events to save this data, and also was created a HTTP and gRPC interface to get the information that has been saved. Was created four binary mqtt, rabbitmq, grpc and http which for the respective protocol.
+This project was built to understand the maturity of the RustLag ecosystem for the most common IoT Tools, such as: MQTT and RabbitMQ. In this project was build a simples example which receive sames messages through MQTT 3.1.1, republish those messages to RabbitMQ and handle the RabbitMQ events to save this data, and also was created a HTTP and gRPC interface to get the information that has been saved. Was created six binary mqtt, amqp, dump, dummy, ggrpc and hhttp which for the respective protocol.
 
 Also in this project we take care about some well-known practices to web development like: Unit tests, Environment variables, Logging, Tracing and Metrics with Opentelemetry, Containerization and so on.
 
@@ -84,11 +84,24 @@ Make sure you have the following pre-requirements:
 
 ## Conclusions:
 
+- **MQTT:**
+
+For now there are a lot of MQTT client crates. The crate for the most famous MQTT community (Eclipse) use C bindings for the MQTT client implemented in C and because of that I think it's a not a god ideia to use that crate. In this project had used [rumqttc](https://crates.io/crates/rumqttc). Very good crate, nice async support with Tokio and Eventloop runtime and also offers support for MQTTv5.
+
+- **RabbitMQ:**
+
+For RabbitMQ the chosen was [lapin](https://crates.io/crates/lapin). This crate offer full AMQP implementation and beautiful RabbitMQ interface.
+
 - **Opentelemetry + Newrelic:**
+
+Opentelemetry is gaining relevance and wen this project was implemented the rust ecosystem was very mature and stable to use the Opentelemetry Rust SDK. Was easy to configure an OTLP tracing exporter and plug this export with Newrelic;
 
 <p align="center">
  <img src="./.docs/otel.png" alt="newrelic-opentelemetry"/> 
 </p>
+
+
+Before some days working in this project my felling is that, the Rust ecosystem is already mature to suporte a full implementation for IoT softwares, there are a lot of crates, documentation and exemplos to guid us.
 
 ## Commands:
 
