@@ -18,14 +18,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     logging::setup(&cfg)?;
     otel::tracing::setup(&cfg)?;
 
-    let pool = Box::new(
-        PgPoolOptions::new()
-            .max_connections(5)
-            .connect(&cfg.pg_uri())
-            .await?,
-    );
+    // info!("{}", cfg.pg_uri());
+    // let opts = PgConnectOptions::new()
+    //     .application_name(cfg.app_name)
+    //     .host(cfg.db_host)
+    //     .port(cfg.db_port)
+    //     .username(cfg.db_name)
+    //     .password(cfg.db_password);
 
-    let repository = IoTRepositoryImpl::new(Box::leak(pool));
+    // let pool = Box::new(
+    //     PgPoolOptions::new()
+    //         .max_connections(5)
+    //         .connect_with(opts)
+    //         .await?,
+    // );
+
+    // let repository = IoTRepositoryImpl::new(Box::leak(pool));
+    let repository = IoTRepositoryImpl::new(None);
     let service = ExampleServiceImpl::new(repository);
     let iot_service = iot::IoTGrpcService::new(service);
 

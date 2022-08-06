@@ -10,8 +10,8 @@ use infra::{
     logging, otel,
     repositories::iot_repository::IoTRepositoryImpl,
 };
-use log::error;
-use sqlx::postgres::PgPoolOptions;
+use log::{error, info};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use std::error::Error;
 
 #[tokio::main]
@@ -40,19 +40,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     amqp.clone().install_topology(&topology).await?;
 
-    let pool = Box::new(
-        PgPoolOptions::new()
-            .max_connections(5)
-            .connect(&cfg.pg_uri())
-            .await?,
-    );
+    // info!("{}", cfg.pg_uri());
+    // let opts = PgConnectOptions::new()
+    //     .application_name(cfg.app_name)
+    //     .host(cfg.db_host)
+    //     .port(cfg.db_port)
+    //     .username(cfg.db_name)
+    //     .password(cfg.db_password);
+
+    // let pool = Box::new(
+    //     PgPoolOptions::new()
+    //         .max_connections(5)
+    //         .connect_with(opts)
+    //         .await?,
+    // );
 
     let def = topology.get_consumers_def("queue_top_test1").unwrap();
     let mut consumer = amqp.consumer(def.queue, def.queue).await?;
     let spawn_iot = tokio::spawn({
         let cloned = amqp.clone();
 
-        let repo = IoTRepositoryImpl::new(Box::leak(pool));
+        let repo = IoTRepositoryImpl::new(None);
         let service = ConsumeIoTMessageServiceImpl::new(repo, amqp.clone());
         let handler = IoTConsumer::new(service);
 

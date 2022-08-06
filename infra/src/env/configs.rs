@@ -35,7 +35,7 @@ pub struct Config {
     pub db_host: &'static str,
     pub db_user: &'static str,
     pub db_password: &'static str,
-    pub db_port: u64,
+    pub db_port: u16,
     pub db_name: &'static str,
 }
 
@@ -67,9 +67,9 @@ impl Config {
 
             db_host: "locahost",
             db_user: "postgres",
-            db_password: "password",
+            db_password: "postgres",
             db_port: 5432,
-            db_name: "test",
+            db_name: "postgres",
         })
     }
 
@@ -86,8 +86,8 @@ impl Config {
 
     pub fn pg_uri(&self) -> String {
         format!(
-            "postgres://{}:{}@{}/{}",
-            self.db_user, self.db_password, self.db_host, self.db_name
+            "postgresql://{}:{}?dbname={}&user={}&password={}",
+            self.db_host, self.db_port, self.db_name, self.db_user, self.db_password
         )
     }
 
