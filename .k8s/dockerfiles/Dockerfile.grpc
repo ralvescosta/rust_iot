@@ -1,7 +1,8 @@
-FROM scratch
+FROM ubuntu:latest
+
+WORKDIR /workspace
 
 COPY ./target/release/ggrpc .
 
-USER scratchuser
-
-CMD ["ggrpc"]
+ENTRYPOINT ["/bin/bash", "-l", "-c"]
+CMD [ "./ggrpc" ]

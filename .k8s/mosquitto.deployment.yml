@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mqtt-broker
+  name: mosquitto-broker
   labels:
-    app: mqtt-broker
+    app: mosquitto-broker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mqtt-broker
+      app: mosquitto-broker
   template:
     metadata:
       labels:
-        app: mqtt-broker
+        app: mosquitto-broker
     spec:
       volumes:
         - name: broker-conf
@@ -31,7 +31,7 @@ spec:
       #   supplementalGroups:
       #   - 1   
       containers:
-        - name: mqtt-broker
+        - name: mosquitto-broker
           image: eclipse-mosquitto
           ports:
             - containerPort: 1883
@@ -66,7 +66,7 @@ kind: Service
 metadata:
   name: mosquitto-svc
   labels:
-    app: mqtt-broker
+    app: mosquitto-broker
 spec:
   type: NodePort
   ports:
@@ -75,4 +75,4 @@ spec:
     targetPort: 1883
     protocol: TCP
   selector:
-    app: mqtt-broker
+    app: mosquitto-broker

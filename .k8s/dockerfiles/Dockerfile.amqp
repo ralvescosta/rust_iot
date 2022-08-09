@@ -1,7 +1,8 @@
-FROM scratch
+FROM ubuntu:latest
+
+WORKDIR /workspace
 
 COPY ./target/release/amqp .
 
-USER scratchuser
-
-CMD ["amqp"]
+ENTRYPOINT ["/bin/bash", "-l", "-c"]
+CMD [ "./amqp" ]

@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqtt
+  labels:
+    app: mqtt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mqtt
+  template:
+    metadata:
+      labels:
+        app: mqtt
+    spec:
+      containers:
+        - name: mqtt
+          image: ralvescosta/mqtt:latest
+          imagePullPolicy: Never # just for local registry propose
+          resources:
+            requests:
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+            
+          

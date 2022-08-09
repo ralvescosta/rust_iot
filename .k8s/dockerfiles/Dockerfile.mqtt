@@ -1,7 +1,8 @@
-FROM scratch
+FROM ubuntu:latest
 
-COPY ./target/release/mqtt .
+WORKDIR /workspace
 
-USER scratchuser
+COPY target/release/mqtt .
 
-CMD ["mqtt"]
+ENTRYPOINT ["/bin/bash", "-l", "-c"]
+CMD [ "./mqtt" ]

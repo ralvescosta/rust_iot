@@ -1,7 +1,8 @@
-FROM scratch
+FROM ubuntu:latest
+
+WORKDIR /workspace
 
 COPY ./target/release/dump .
 
-USER scratchuser
-
-CMD ["dump"]
+ENTRYPOINT ["/bin/bash", "-l", "-c"]
+CMD [ "./dump" ]
