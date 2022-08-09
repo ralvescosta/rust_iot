@@ -1,9 +1,8 @@
-FROM rust:1.62.0 as builder
-WORKDIR /usr/src/myapp
-COPY . .
-RUN cargo install --path ./s.grpc
+FROM ubuntu:latest
 
-FROM scratch
-COPY --from=builder /usr/local/cargo/bin/grpc /usr/local/bin/grpc
-USER scratchuser
-CMD ["ggrpc"]
+WORKDIR /workspace
+
+COPY ./target/release/ggrpc .
+
+ENTRYPOINT ["/bin/bash", "-l", "-c"]
+CMD [ "./ggrpc" ]

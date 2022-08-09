@@ -2,7 +2,7 @@ FROM ubuntu:latest
 
 WORKDIR /workspace
 
-COPY ./target/release/amqp .
+COPY ./target/release/api .
 
 ENTRYPOINT ["/bin/bash", "-l", "-c"]
-CMD [ "./amqp" ]
+CMD [ "./api" ]

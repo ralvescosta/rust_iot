@@ -1,51 +1,24 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: conf
-data:
-  mosquitto.conf:  |
-    listener 1883
-
-    persistence true
-    persistence_location /mosquitto/data/
-
-    log_dest file /mosquitto/log/mosquitto.log
-    log_dest stdout
-
-    allow_anonymous false
-    password_file /mosquitto/auth/password_file.txt
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: passwd
-data:
-  password_file.txt: |
-    mqtt_user:password
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: mqtt-broker
+  name: mosquitto-broker
   labels:
-    app: mqtt-broker
+    app: mosquitto-broker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mqtt-broker
+      app: mosquitto-broker
   template:
     metadata:
       labels:
-        app: mqtt-broker
+        app: mosquitto-broker
     spec:
       volumes:
         - name: broker-conf
-          configMap:
-            name: conf
+          emptyDir: {}
         - name: broker-passwd
-          configMap:
-            name: passwd
+          emptyDir: {}
         - name: mosquitto-data
           emptyDir: {}
         - name: mosquitto-log
@@ -58,7 +31,7 @@ spec:
       #   supplementalGroups:
       #   - 1   
       containers:
-        - name: mqtt-broker
+        - name: mosquitto-broker
           image: eclipse-mosquitto
           ports:
             - containerPort: 1883
@@ -70,13 +43,14 @@ spec:
               cpu: "500m"
           command: ["/bin/sh", "-c"]
           args:
-            - mosquitto_passwd -U /mosquitto/auth/password_file.txt;
+            - echo "listener 1883\n\npersistence true\npersistence_location /mosquitto/data/\n\nlog_dest file /mosquitto/log/mosquitto.log\nlog_dest stdout\n\nallow_anonymous false\npassword_file /mosquitto/auth/password_file.txt" > /mosquitto/config/mosquitto.conf;
+              echo "mqtt_user:password" > /mosquitto/auth/password_file.txt;
+              mosquitto_passwd -U /mosquitto/auth/password_file.txt;
               /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf;
               echo mosquitto configured;
           volumeMounts:
             - name: broker-passwd
-              mountPath: /mosquitto/auth/password_file.txt
-              subPath: password_file.txt
+              mountPath: /mosquitto/auth/
 
             - name: mosquitto-data
               mountPath: /mosquitto/data
@@ -85,21 +59,20 @@ spec:
               mountPath: /mosquitto/log
 
             - name: broker-conf
-              mountPath: /mosquitto/config/mosquitto.conf
-              subPath: mosquitto.conf
+              mountPath: /mosquitto/config/
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: mosquitto-svc
   labels:
-    app: mqtt-broker
+    app: mosquitto-broker
 spec:
   type: NodePort
   ports:
-  - port: 1883
+  - port: 1888
     nodePort: 30001
     targetPort: 1883
     protocol: TCP
   selector:
-    app: mqtt-broker
+    app: mosquitto-broker

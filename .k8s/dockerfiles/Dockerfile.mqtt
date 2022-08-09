@@ -1,9 +1,8 @@
-FROM rust:1.62.0 as builder
-WORKDIR /usr/src/myapp
-COPY . .
-RUN cargo install --path ./s.mqtt
+FROM ubuntu:latest
 
-FROM scratch
-COPY --from=builder /usr/local/cargo/bin/mqtt /usr/local/bin/mqtt
-USER scratchuser
-CMD ["mqtt"]
+WORKDIR /workspace
+
+COPY target/release/mqtt .
+
+ENTRYPOINT ["/bin/bash", "-l", "-c"]
+CMD [ "./mqtt" ]
