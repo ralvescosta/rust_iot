@@ -1,0 +1,7 @@
+FROM scratch
+
+COPY ./target/release/api .
+
+USER scratchuser
+
+CMD ["api"]

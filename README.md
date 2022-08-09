@@ -41,7 +41,7 @@ Make sure you have the following pre-requirements:
 - **To build the MQTT Binary**
 
   ```bash
-  cargo build --binary mqtt
+  cargo build --binary mqtt --release
   ```
 
 - **To build the AMQP Binaries**
@@ -49,19 +49,19 @@ Make sure you have the following pre-requirements:
   - **amqp**
 
   ```bash
-  cargo build --binary amqp
+  cargo build --binary amqp --release
   ```
 
   - **dummy**
 
   ```bash
-  cargo build --binary dummy
+  cargo build --binary dummy --release
   ```
 
   - **dump**
 
   ```bash
-  cargo build --binary dump
+  cargo build --binary dump --release
   ```
 
 ## How can I run the project?

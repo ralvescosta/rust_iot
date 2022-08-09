@@ -1,9 +1,7 @@
-FROM rust:1.62.0 as builder
-WORKDIR /usr/src/myapp
-COPY . .
-RUN cargo install --path ./s.dummy
-
 FROM scratch
-COPY --from=builder /usr/local/cargo/bin/dummy /usr/local/bin/dummy
+
+COPY ./target/release/dummy .
+
 USER scratchuser
+
 CMD ["dummy"]
