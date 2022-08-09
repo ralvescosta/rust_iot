@@ -1,1 +1,5 @@
-target/debug
+# Ignore everything
+*
+
+# Allow files and directories
+!target/release
