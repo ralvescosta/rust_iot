@@ -17,7 +17,7 @@ pub trait IoTRepository {
 
 pub struct IoTRepositoryImpl {
     tracer: BoxedTracer,
-    pool: Option<&'static Pool<Postgres>>,
+    pool: Arc<Pool<Postgres>>,
 }
 
 #[async_trait]
@@ -44,8 +44,14 @@ impl IoTRepository for IoTRepositoryImpl {
     async fn find(&self, ctx: &Context) -> Result<(), RepositoriesError> {
         let cx = otel::tracing::ctx_from_ctx(&self.tracer, ctx, "sql find");
 
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|_| RepositoriesError::InternalError {})?;
+
         sqlx::query("SELECT * FROM iot")
-            .execute(self.pool.unwrap())
+            .execute(&mut *conn)
             .with_context(cx)
             .await
             .map_err(|_| RepositoriesError::InternalError {})?;
@@ -55,7 +61,7 @@ impl IoTRepository for IoTRepositoryImpl {
 }
 
 impl IoTRepositoryImpl {
-    pub fn new(pool: Option<&'static Pool<Postgres>>) -> Arc<dyn IoTRepository + Send + Sync> {
+    pub fn new(pool: Arc<Pool<Postgres>>) -> Arc<dyn IoTRepository + Send + Sync> {
         Arc::new(IoTRepositoryImpl {
             tracer: global::tracer("iot_repository"),
             pool,

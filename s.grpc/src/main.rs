@@ -5,7 +5,8 @@ use infra::{env::Config, logging, otel, repositories::iot_repository::IoTReposit
 use log::debug;
 use protos::iot::iot_data_server::IotDataServer;
 use services::iot;
-use sqlx::postgres::PgPoolOptions;
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
+use std::sync::Arc;
 use tonic::transport::Server;
 
 #[tokio::main]
@@ -19,22 +20,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     otel::tracing::setup(&cfg)?;
 
     // info!("{}", cfg.pg_uri());
-    // let opts = PgConnectOptions::new()
-    //     .application_name(cfg.app_name)
-    //     .host(cfg.db_host)
-    //     .port(cfg.db_port)
-    //     .username(cfg.db_name)
-    //     .password(cfg.db_password);
+    let opts = PgConnectOptions::new()
+        .application_name(cfg.app_name)
+        .host(cfg.db_host)
+        .port(cfg.db_port)
+        .username(cfg.db_name)
+        .password(cfg.db_password);
 
-    // let pool = Box::new(
-    //     PgPoolOptions::new()
-    //         .max_connections(5)
-    //         .connect_with(opts)
-    //         .await?,
-    // );
+    let pool = Arc::new(
+        PgPoolOptions::new()
+            .max_connections(5)
+            .connect_with(opts)
+            .await?,
+    );
 
-    // let repository = IoTRepositoryImpl::new(Box::leak(pool));
-    let repository = IoTRepositoryImpl::new(None);
+    let repository = IoTRepositoryImpl::new(pool);
     let service = ExampleServiceImpl::new(repository);
     let iot_service = iot::IoTGrpcService::new(service);
 
