@@ -1,11 +1,11 @@
 use crate::{errors::RepositoriesError, otel};
 use async_trait::async_trait;
+use deadpool_postgres::Pool;
 use opentelemetry::{
     global::{self, BoxedTracer},
     trace::FutureExt,
     Context,
 };
-use sqlx::{Pool, Postgres};
 use std::{sync::Arc, time::Duration};
 
 #[async_trait]
@@ -17,7 +17,7 @@ pub trait IoTRepository {
 
 pub struct IoTRepositoryImpl {
     tracer: BoxedTracer,
-    pool: Arc<Pool<Postgres>>,
+    pool: Arc<Pool>,
 }
 
 #[async_trait]
@@ -42,26 +42,22 @@ impl IoTRepository for IoTRepositoryImpl {
     }
 
     async fn find(&self, ctx: &Context) -> Result<(), RepositoriesError> {
-        let cx = otel::tracing::ctx_from_ctx(&self.tracer, ctx, "sql find");
+        let _cx = otel::tracing::ctx_from_ctx(&self.tracer, ctx, "sql find");
 
-        let mut conn = self
-            .pool
-            .acquire()
-            .await
-            .map_err(|_| RepositoriesError::InternalError {})?;
+        let mut _client = self.pool.get().await.unwrap();
 
-        sqlx::query("SELECT * FROM iot")
-            .execute(&mut *conn)
-            .with_context(cx)
-            .await
-            .map_err(|_| RepositoriesError::InternalError {})?;
+        // let statement = client
+        //     .prepare("SELECT * FROM foo WHERE bar = $1")
+        //     .await
+        //     .unwrap();
+        // let rows = client.query(&statement, &[&""]).await.unwrap();
 
         Ok(())
     }
 }
 
 impl IoTRepositoryImpl {
-    pub fn new(pool: Arc<Pool<Postgres>>) -> Arc<dyn IoTRepository + Send + Sync> {
+    pub fn new(pool: Arc<Pool>) -> Arc<dyn IoTRepository + Send + Sync> {
         Arc::new(IoTRepositoryImpl {
             tracer: global::tracer("iot_repository"),
             pool,
