@@ -1,10 +1,7 @@
 use async_trait::async_trait;
-use infra::{
-    amqp::{
-        client::IAmqp,
-        types::{AmqpMessageType, PublishData, PublishPayload},
-    },
-    repositories::iot_repository::IoTRepository,
+use infra::amqp::{
+    client::IAmqp,
+    types::{AmqpMessageType, PublishData, PublishPayload},
 };
 use opentelemetry::Context;
 use serde::{Deserialize, Serialize};
@@ -16,19 +13,14 @@ pub trait ConsumeIotMessageService {
 }
 
 pub struct ConsumeIoTMessageServiceImpl {
-    repository: Arc<dyn IoTRepository + Send + Sync>,
     amqp: Arc<dyn IAmqp + Send + Sync>,
 }
 
 impl ConsumeIoTMessageServiceImpl {
     pub fn new(
-        repo: Arc<dyn IoTRepository + Send + Sync>,
         amqp: Arc<dyn IAmqp + Send + Sync>,
     ) -> Arc<dyn ConsumeIotMessageService + Send + Sync> {
-        Arc::new(ConsumeIoTMessageServiceImpl {
-            repository: repo,
-            amqp,
-        })
+        Arc::new(ConsumeIoTMessageServiceImpl { amqp })
     }
 }
 
@@ -50,10 +42,6 @@ impl SendToAmqp {
 #[async_trait]
 impl ConsumeIotMessageService for ConsumeIoTMessageServiceImpl {
     async fn consume(&self, ctx: &Context, _msg: &[u8]) -> Result<(), ()> {
-        self.repository.get(ctx).await.map_err(|_| ())?;
-
-        self.repository.save(ctx).await.map_err(|_| ())?;
-
         let data = SendToAmqp::new()?;
 
         self.amqp
